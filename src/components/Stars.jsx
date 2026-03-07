@@ -4,9 +4,9 @@ export default function Stars({ rating }) {
 
   return (
     <span className="stars">
-      {"★".repeat(full)}
-      {half ? "½" : ""}
-      {"☆".repeat(5 - full - (half ? 1 : 0))}
+      {"*".repeat(full)}
+      {half ? "+" : ""}
+      {".".repeat(5 - full - (half ? 1 : 0))}
     </span>
   );
 }

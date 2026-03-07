@@ -83,3 +83,7 @@ For India launch flows: Razorpay is a practical default.
 3. Integrate Supabase Auth (owner/student roles).
 4. Replace mock data in [`src/data/hostels.js`](/c:/Users/Ajay/Desktop/StayNest/src/data/hostels.js) with live queries.
 5. Deploy frontend on Vercel.
+
+## Product Document
+
+Detailed PRD is available at [`docs/StayNest-PRD.md`](/c:/Users/Ajay/Desktop/StayNest/docs/StayNest-PRD.md).

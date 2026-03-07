@@ -6,5 +6,5 @@ export default function Toast({ message, onClose }) {
     return () => clearTimeout(timeout);
   }, [onClose]);
 
-  return <div className="toast">✅ {message}</div>;
+  return <div className="toast">OK {message}</div>;
 }

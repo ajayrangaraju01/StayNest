@@ -3,38 +3,47 @@ import { useAuth } from "../auth/useAuth";
 
 const ROLE_META = {
   owner: { title: "Hostel Owner", subtitle: "Manage listings, menus, enquiries, and bookings." },
-  guest: { title: "Guest", subtitle: "Browse hostels, request bookings, and track your plans." },
+  guest: { title: "Guest", subtitle: "Find hostels and send booking requests." },
 };
 
 export default function AuthPage({ defaultRole = "guest", onBack, onSuccess }) {
-  const { login, register } = useAuth();
+  const { requestOtp, login, register } = useAuth();
   const [mode, setMode] = useState("login");
   const [role, setRole] = useState(defaultRole);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", phone: "", otp: "" });
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const handleOtpSend = () => {
+    setError("");
+    const result = requestOtp({ phone: form.phone });
+    if (!result.ok) {
+      setInfo("");
+      setError(result.error);
+      return;
+    }
+    setInfo(`OTP sent. Demo code: ${result.otp}`);
+  };
 
   const handleSubmit = (event) => {
     event.preventDefault();
     setError("");
+    setInfo("");
 
-    if (!form.email || !form.password || (mode === "signup" && !form.name.trim())) {
-      setError("Please fill all required fields.");
+    if (!form.phone || !form.otp || (mode === "signup" && !form.name.trim())) {
+      setError("Please fill all required fields and verify OTP.");
       return;
     }
 
-    if (form.password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-
-    setBusy(true);
     const payload = {
       role,
-      email: form.email,
-      password: form.password,
+      phone: form.phone,
+      otp: form.otp,
       name: form.name,
     };
+
+    setBusy(true);
     const result = mode === "login" ? login(payload) : register(payload);
     setBusy(false);
 
@@ -107,30 +116,34 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess }) {
           )}
 
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label">Mobile Number</label>
             <input
               className="form-input"
-              type="email"
-              value={form.email}
-              onChange={(event) => setForm({ ...form, email: event.target.value })}
-              placeholder="you@example.com"
-              autoComplete="email"
+              value={form.phone}
+              onChange={(event) => setForm({ ...form, phone: event.target.value })}
+              placeholder="10-digit number"
+              autoComplete="tel"
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Password</label>
-            <input
-              className="form-input"
-              type="password"
-              value={form.password}
-              onChange={(event) => setForm({ ...form, password: event.target.value })}
-              placeholder="Minimum 6 characters"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-            />
+            <label className="form-label">OTP</label>
+            <div className="auth-otp-row">
+              <input
+                className="form-input"
+                value={form.otp}
+                onChange={(event) => setForm({ ...form, otp: event.target.value })}
+                placeholder="6-digit OTP"
+                inputMode="numeric"
+              />
+              <button type="button" className="nav-btn primary auth-otp-btn" onClick={handleOtpSend}>
+                Send OTP
+              </button>
+            </div>
           </div>
 
           {error && <div className="auth-error">{error}</div>}
+          {info && <div className="auth-info">{info}</div>}
 
           <button className="book-now-btn" type="submit" disabled={busy}>
             {busy ? "Please wait..." : mode === "login" ? "Login" : "Create Account"}

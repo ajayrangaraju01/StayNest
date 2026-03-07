@@ -10,14 +10,7 @@ export const HOSTELS = [
     reviews: 128,
     description:
       "A modern hostel with all amenities, located near KPHB Metro. Perfect for working professionals and students.",
-    amenities: [
-      "WiFi",
-      "AC",
-      "Laundry",
-      "CCTV",
-      "Water Purifier",
-      "Power Backup",
-    ],
+    amenities: ["WiFi", "AC", "Laundry", "CCTV", "Water Purifier", "Power Backup"],
     images: [
       "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&q=80",
       "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&q=80",
@@ -80,13 +73,7 @@ export const HOSTELS = [
     reviews: 64,
     description:
       "Co-living space for tech professionals with ultra-fast internet and collaborative work spaces.",
-    amenities: [
-      "1Gbps WiFi",
-      "Co-working Space",
-      "Cafeteria",
-      "Gym",
-      "Gaming Zone",
-    ],
+    amenities: ["1Gbps WiFi", "Co-working Space", "Cafeteria", "Gym", "Gaming Zone"],
     images: [
       "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=800&q=80",
       "https://images.unsplash.com/photo-1562663474-6cbb3eaa4d14?w=800&q=80",
@@ -151,27 +138,27 @@ export const LOCATIONS = [
 ];
 
 export const amenityIcons = {
-  WiFi: "📶",
-  AC: "❄️",
-  Gym: "🏋️",
-  CCTV: "📹",
-  Laundry: "👕",
-  Parking: "🚗",
-  "Co-working Space": "💻",
-  Cafeteria: "☕",
-  "Hot Water": "🚿",
-  "Study Room": "📚",
-  "Power Backup": "⚡",
-  "Water Purifier": "💧",
-  "Common Kitchen": "🍳",
-  "Terrace Garden": "🌿",
-  "1Gbps WiFi": "🚀",
-  "Gaming Zone": "🎮",
+  WiFi: "WF",
+  AC: "AC",
+  Gym: "GY",
+  CCTV: "CC",
+  Laundry: "LD",
+  Parking: "PK",
+  "Co-working Space": "CW",
+  Cafeteria: "CF",
+  "Hot Water": "HW",
+  "Study Room": "SR",
+  "Power Backup": "PB",
+  "Water Purifier": "WP",
+  "Common Kitchen": "CK",
+  "Terrace Garden": "TG",
+  "1Gbps WiFi": "1G",
+  "Gaming Zone": "GZ",
 };
 
 export const roomIcons = {
-  "2 Share": "🛏️",
-  "3 Share": "🛏️",
-  "4 Share": "🏠",
-  "5 Share": "🏘️",
+  "2 Share": "R2",
+  "3 Share": "R3",
+  "4 Share": "R4",
+  "5 Share": "R5",
 };

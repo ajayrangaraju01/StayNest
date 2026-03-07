@@ -10,22 +10,16 @@ export default function HostelCard({ hostel, onClick }) {
         <span className={`card-badge badge-${hostel.gender.toLowerCase().replace("-", "")}`}>
           {hostel.gender}
         </span>
-        {hostel.verified && <span className="verified-badge">✓ Verified</span>}
+        {hostel.verified && <span className="verified-badge">Verified</span>}
       </div>
       <div className="card-body">
         <div className="card-location">
-          📍
-          {" "}
           {hostel.location}
           ,{" "}
           {hostel.city}
         </div>
         <div className="card-name">{hostel.name}</div>
-        <div className="card-distance">
-          🚶
-          {" "}
-          {hostel.distance}
-        </div>
+        <div className="card-distance">{hostel.distance}</div>
         <div className="card-rating">
           <Stars rating={hostel.rating} />
           <span className="rating-num">{hostel.rating}</span>
@@ -41,7 +35,7 @@ export default function HostelCard({ hostel, onClick }) {
             <span key={room.type} className={`room-tag${room.available === 0 ? " full" : ""}`}>
               {room.type}
               {" "}
-              {room.available === 0 ? "• Full" : `• ${room.available} left`}
+              {room.available === 0 ? "- Full" : `- ${room.available} left`}
             </span>
           ))}
         </div>
@@ -49,7 +43,8 @@ export default function HostelCard({ hostel, onClick }) {
           <div className="card-price">
             Starting from
             <strong>
-              ₹
+              INR
+              {" "}
               {minPrice.toLocaleString()}
             </strong>
             /month
@@ -61,7 +56,7 @@ export default function HostelCard({ hostel, onClick }) {
               onClick();
             }}
           >
-            View Details →
+            View Details
           </button>
         </div>
       </div>

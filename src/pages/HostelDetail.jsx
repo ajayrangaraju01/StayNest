@@ -2,21 +2,45 @@ import { useState } from "react";
 import Stars from "../components/Stars";
 import { amenityIcons, roomIcons } from "../data/hostels";
 
-export default function HostelDetail({ hostel, user, onBack, onToast, onRequireGuestLogin }) {
+export default function HostelDetail({
+  hostel,
+  user,
+  onBack,
+  onToast,
+  onRequireGuestLogin,
+  onBookingRequest,
+}) {
   const [activeImg, setActiveImg] = useState(0);
   const [selectedRoom, setSelectedRoom] = useState(
     hostel.rooms.find((room) => room.available > 0)?.type || "",
   );
+  const [moveInDate, setMoveInDate] = useState("");
+  const [message, setMessage] = useState("");
 
   const selectedRoomData = hostel.rooms.find((room) => room.type === selectedRoom);
   const securityDeposit = selectedRoomData ? selectedRoomData.price * 2 : 0;
 
   const handleRequestBooking = () => {
+    if (!selectedRoomData) {
+      onToast("Please select an available room.");
+      return;
+    }
+
+    if (!moveInDate) {
+      onToast("Please select your move-in date.");
+      return;
+    }
+
     if (!user || user.role !== "guest") {
       onRequireGuestLogin();
       return;
     }
-    onToast("Booking request sent! Owner will contact you shortly.");
+
+    onBookingRequest({
+      roomType: selectedRoomData.type,
+      moveInDate,
+      message,
+    });
   };
 
   return (
@@ -151,8 +175,8 @@ export default function HostelDetail({ hostel, user, onBack, onToast, onRequireG
 
           <div>
             <div className="booking-sidebar">
-              <div className="booking-title">Book a Room</div>
-              <div className="booking-sub">Select your preferred sharing type</div>
+              <div className="booking-title">Request to Join</div>
+              <div className="booking-sub">Select room type and move-in date</div>
 
               <select
                 className="booking-select"
@@ -174,6 +198,27 @@ export default function HostelDetail({ hostel, user, onBack, onToast, onRequireG
                   </option>
                 ))}
               </select>
+
+              <div className="form-group" style={{ marginBottom: 10 }}>
+                <label className="form-label">Move-in Date</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={moveInDate}
+                  onChange={(event) => setMoveInDate(event.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">Message to Owner</label>
+                <textarea
+                  className="form-textarea"
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder="Tell owner about your requirements..."
+                  style={{ minHeight: 82 }}
+                />
+              </div>
 
               {selectedRoomData && (
                 <>
@@ -210,7 +255,7 @@ export default function HostelDetail({ hostel, user, onBack, onToast, onRequireG
               )}
 
               <button className="book-now-btn" onClick={handleRequestBooking}>
-                {user?.role === "guest" ? "Request Booking" : "Login as Guest to Book"}
+                {user?.role === "guest" ? "Send Join Request" : "Login as Guest"}
               </button>
             </div>
           </div>
