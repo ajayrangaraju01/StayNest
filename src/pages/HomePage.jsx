@@ -2,7 +2,13 @@ import { useState } from "react";
 import HostelCard from "../components/HostelCard";
 import { LOCATIONS } from "../data/hostels";
 
-export default function HomePage({ hostels, onSearch, onHostelClick, onOwnerClick }) {
+export default function HomePage({
+  hostels,
+  onSearch,
+  onHostelClick,
+  onOwnerClick,
+  isLoading = false,
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [genderFilter, setGenderFilter] = useState("All");
   const [locationFilter, setLocationFilter] = useState("All Locations");
@@ -88,7 +94,13 @@ export default function HomePage({ hostels, onSearch, onHostelClick, onOwnerClic
           </div>
         </div>
 
-        {filteredHostels.length > 0 ? (
+        {isLoading ? (
+          <div className="empty-state">
+            <span className="empty-icon">Loading</span>
+            <div className="empty-title">Fetching hostels...</div>
+            <p className="empty-sub">Please wait a moment.</p>
+          </div>
+        ) : filteredHostels.length > 0 ? (
           <div className="hostel-grid">
             {filteredHostels.map((hostel) => (
               <HostelCard key={hostel.id} hostel={hostel} onClick={() => onHostelClick(hostel)} />

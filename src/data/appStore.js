@@ -1,102 +1,237 @@
+import {
+  createBooking,
+  createHostel,
+  createRoom,
+  fetchBookings,
+  fetchHostels,
+  fetchRooms,
+  updateBooking,
+} from "../api/staynestApi";
 import { HOSTELS } from "./hostels";
 
-const HOSTELS_KEY = "staynest_app_hostels";
-const BOOKING_REQUESTS_KEY = "staynest_booking_requests";
+const FALLBACK_BY_NAME = new Map(HOSTELS.map((hostel) => [hostel.name, hostel]));
 
-function readJson(key, fallback) {
-  const raw = localStorage.getItem(key);
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
+const DEFAULT_MENU = {
+  breakfast: "Menu will be updated by owner.",
+  lunch: "Menu will be updated by owner.",
+  dinner: "Menu will be updated by owner.",
+};
+
+const DEFAULT_IMAGES = [
+  "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&q=80",
+  "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&q=80",
+  "https://images.unsplash.com/photo-1585412727339-54e4bae3bbf9?w=800&q=80",
+];
+
+const ROOM_TYPE_TO_UI = {
+  single: "Single",
+  double: "2 Share",
+  triple: "3 Share",
+  four: "4 Share",
+  five: "5 Share",
+  six: "6 Share",
+};
+
+const ROOM_TYPE_TO_API = {
+  Single: "single",
+  "2 Share": "double",
+  "3 Share": "triple",
+  "4 Share": "four",
+  "5 Share": "five",
+  "6 Share": "six",
+};
+
+function mapGenderToUi(genderType) {
+  if (genderType === "boys") return "Boys";
+  if (genderType === "girls") return "Girls";
+  if (genderType === "coed") return "Co-ed";
+  return "Co-ed";
 }
 
-function writeJson(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+function mapGenderToApi(gender) {
+  if (gender === "Boys") return "boys";
+  if (gender === "Girls") return "girls";
+  return "coed";
 }
 
-function ownerIdFromName(name) {
-  return `owner_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+function mapRoomsForUi(rooms) {
+  return rooms.map((room) => ({
+    id: room.id,
+    type: ROOM_TYPE_TO_UI[room.type] || room.type,
+    price: Number(room.monthly_rent || 0),
+    total: room.total_beds,
+    available: Math.max(0, room.total_beds - room.occupied_beds),
+  }));
 }
 
-function withSeedMetadata(hostel) {
+function mapHostelForUi(hostel, rooms) {
+  const fallback = FALLBACK_BY_NAME.get(hostel.name);
+  const photos = hostel.photos?.length
+    ? hostel.photos.map((photo) => photo.url)
+    : fallback?.images || DEFAULT_IMAGES;
+  const amenities = hostel.amenities?.length
+    ? hostel.amenities
+    : fallback?.amenities || ["WiFi", "CCTV", "Power Backup"];
+  const menu = fallback?.menu || DEFAULT_MENU;
+  const rating = fallback?.rating ?? 4.2;
+  const reviews = fallback?.reviews ?? 0;
+  const distance = fallback?.distance || "Distance not set";
+
   return {
-    ...hostel,
-    ownerId: ownerIdFromName(hostel.owner),
-    moderationStatus: "approved",
+    id: hostel.id,
+    ownerId: hostel.owner,
+    owner: fallback?.owner || "Owner",
+    name: hostel.name,
+    location: hostel.area,
+    city: hostel.city,
+    address: hostel.address,
+    contact_number: hostel.contact_number || "",
+    rating,
+    reviews,
+    description: hostel.description || "",
+    amenities,
+    images: photos,
+    rooms,
+    menu,
+    verified: hostel.moderation_status === "approved",
+    moderationStatus: hostel.moderation_status,
+    gender: mapGenderToUi(hostel.gender_type),
+    distance,
   };
 }
 
-function ensureSeedData() {
-  const existing = readJson(HOSTELS_KEY, null);
-  if (Array.isArray(existing) && existing.length > 0) return existing;
-  const seeded = HOSTELS.map(withSeedMetadata);
-  writeJson(HOSTELS_KEY, seeded);
-  return seeded;
+export async function getHostels({ useAuth = false } = {}) {
+  const [hostels, rooms] = await Promise.all([
+    fetchHostels({ useAuth }),
+    fetchRooms({ useAuth }),
+  ]);
+  const roomsByHostel = rooms.reduce((acc, room) => {
+    const list = acc[room.hostel] || [];
+    list.push(room);
+    acc[room.hostel] = list;
+    return acc;
+  }, {});
+
+  return hostels.map((hostel) =>
+    mapHostelForUi(hostel, mapRoomsForUi(roomsByHostel[hostel.id] || [])),
+  );
 }
 
-export function getHostels() {
-  return ensureSeedData();
+export async function getOwnerHostels(ownerId) {
+  const hostels = await getHostels();
+  return hostels.filter((hostel) => hostel.ownerId === ownerId);
 }
 
-export function getPublicHostels() {
-  return getHostels().filter((hostel) => hostel.moderationStatus === "approved");
-}
+export async function addHostelListing({ ownerId, ownerName, hostel }) {
+  const payload = {
+    owner: ownerId,
+    name: hostel.name.trim(),
+    address: hostel.address.trim(),
+    area: hostel.location.trim(),
+    city: hostel.city.trim(),
+    pincode: hostel.pincode || "",
+    gender_type: mapGenderToApi(hostel.gender),
+    description: hostel.description.trim(),
+    rules: "",
+    contact_number: hostel.contact_number || "",
+    moderation_status: "pending",
+    photos: hostel.images.map((url, index) => ({ url, display_order: index })),
+  };
 
-export function getOwnerHostels(ownerId) {
-  return getHostels().filter((hostel) => hostel.ownerId === ownerId);
-}
+  const created = await createHostel(payload);
+  const roomCreates = hostel.rooms.map((room) =>
+    createRoom({
+      hostel: created.id,
+      type: ROOM_TYPE_TO_API[room.type] || "single",
+      monthly_rent: room.price,
+      total_beds: room.total,
+      occupied_beds: Math.max(0, room.total - room.available),
+      is_maintenance: false,
+    }),
+  );
 
-export function addHostelListing({ ownerId, ownerName, hostel }) {
-  const hostels = getHostels();
-  const nextId = hostels.reduce((maxId, item) => Math.max(maxId, Number(item.id) || 0), 0) + 1;
+  await Promise.all(roomCreates);
 
-  const newHostel = {
-    id: nextId,
+  return {
+    id: created.id,
     ownerId,
     owner: ownerName,
-    name: hostel.name.trim(),
-    location: hostel.location.trim(),
-    city: hostel.city.trim(),
-    address: hostel.address.trim(),
+    name: created.name,
+    location: created.area,
+    city: created.city,
+    address: created.address,
     rating: 0,
     reviews: 0,
-    description: hostel.description.trim(),
+    description: created.description || "",
     amenities: hostel.amenities,
     images: hostel.images,
     rooms: hostel.rooms,
-    menu: {
-      breakfast: "Will be updated by owner",
-      lunch: "Will be updated by owner",
-      dinner: "Will be updated by owner",
-    },
+    menu: DEFAULT_MENU,
     verified: false,
     moderationStatus: "pending",
     gender: hostel.gender,
     distance: hostel.distance || "Distance not set",
   };
-
-  const updated = [newHostel, ...hostels];
-  writeJson(HOSTELS_KEY, updated);
-  return newHostel;
 }
 
-export function getBookingRequests() {
-  return readJson(BOOKING_REQUESTS_KEY, []);
+function mapBookingStatusToUi(status) {
+  if (status === "approved") return "accepted";
+  if (status === "rejected") return "rejected";
+  return "pending";
 }
 
-export function getOwnerBookingRequests(ownerId) {
-  const ownerHostelIds = new Set(getOwnerHostels(ownerId).map((hostel) => hostel.id));
-  return getBookingRequests().filter((request) => ownerHostelIds.has(request.hostelId));
+function mapBookingStatusToApi(status) {
+  if (status === "accepted") return "approved";
+  if (status === "rejected") return "rejected";
+  return "requested";
 }
 
-export function getStudentBookingRequests(studentId) {
-  return getBookingRequests().filter((request) => request.studentId === studentId);
+export async function getOwnerBookingRequests(ownerId, hostels = []) {
+  const ownerHostelIds = new Set(hostels.filter((hostel) => hostel.ownerId === ownerId).map((h) => h.id));
+  const [bookings, rooms] = await Promise.all([fetchBookings(), fetchRooms({ useAuth: true })]);
+  const roomTypeById = rooms.reduce((acc, room) => {
+    acc[room.id] = ROOM_TYPE_TO_UI[room.type] || room.type;
+    return acc;
+  }, {});
+  return bookings
+    .filter((booking) => ownerHostelIds.has(booking.hostel))
+    .map((booking) => ({
+      id: booking.id,
+      hostelId: booking.hostel,
+      hostelName: hostels.find((hostel) => hostel.id === booking.hostel)?.name || "Hostel",
+      studentId: booking.student,
+      studentName: "Student",
+      roomType: booking.room ? roomTypeById[booking.room] || "Room" : "Room",
+      moveInDate: booking.move_in_date,
+      message: booking.message || "",
+      status: mapBookingStatusToUi(booking.status),
+      createdAt: booking.created_at,
+    }));
 }
 
-export function createBookingRequest({
+export async function getStudentBookingRequests(studentId) {
+  const [bookings, rooms] = await Promise.all([fetchBookings(), fetchRooms()]);
+  const roomTypeById = rooms.reduce((acc, room) => {
+    acc[room.id] = ROOM_TYPE_TO_UI[room.type] || room.type;
+    return acc;
+  }, {});
+  return bookings
+    .filter((booking) => booking.student === studentId)
+    .map((booking) => ({
+      id: booking.id,
+      hostelId: booking.hostel,
+      hostelName: "Hostel",
+      studentId: booking.student,
+      studentName: "Student",
+      roomType: booking.room ? roomTypeById[booking.room] || "Room" : "Room",
+      moveInDate: booking.move_in_date,
+      message: booking.message || "",
+      status: mapBookingStatusToUi(booking.status),
+      createdAt: booking.created_at,
+    }));
+}
+
+export async function createBookingRequest({
   hostelId,
   hostelName,
   studentId,
@@ -104,64 +239,48 @@ export function createBookingRequest({
   roomType,
   moveInDate,
   message,
+  roomId,
 }) {
-  const requests = getBookingRequests();
-  const duplicate = requests.find(
-    (request) =>
-      request.hostelId === hostelId && request.studentId === studentId && request.status === "pending",
-  );
-
-  if (duplicate) {
-    return { ok: false, error: "You already have a pending request for this hostel." };
+  if (!studentId) {
+    return { ok: false, error: "Please login to send a booking request." };
   }
 
-  const newRequest = {
-    id: crypto.randomUUID(),
-    hostelId,
-    hostelName,
-    studentId,
-    studentName,
-    roomType,
-    moveInDate,
+  const payload = {
+    hostel: hostelId,
+    student: studentId,
+    room: roomId || null,
+    status: "requested",
     message: message?.trim() || "",
-    status: "pending",
-    createdAt: new Date().toISOString(),
+    move_in_date: moveInDate || null,
   };
 
-  writeJson(BOOKING_REQUESTS_KEY, [newRequest, ...requests]);
-  return { ok: true, request: newRequest };
+  try {
+    const booking = await createBooking(payload);
+    return {
+      ok: true,
+      request: {
+        id: booking.id,
+        hostelId,
+        hostelName,
+        studentId,
+        studentName,
+        roomType,
+        moveInDate,
+        message: payload.message,
+        status: "pending",
+        createdAt: booking.created_at,
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to create booking request." };
+  }
 }
 
-export function updateBookingRequestStatus({ requestId, status }) {
-  const requests = getBookingRequests();
-  const target = requests.find((request) => request.id === requestId);
-  if (!target) return { ok: false, error: "Request not found." };
-
-  if (target.status !== "pending") {
-    return { ok: false, error: "Only pending requests can be updated." };
+export async function updateBookingRequestStatus({ requestId, status }) {
+  try {
+    await updateBooking(requestId, { status: mapBookingStatusToApi(status) });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to update booking request." };
   }
-
-  const updatedRequests = requests.map((request) =>
-    request.id === requestId
-      ? { ...request, status, respondedAt: new Date().toISOString() }
-      : request,
-  );
-  writeJson(BOOKING_REQUESTS_KEY, updatedRequests);
-
-  if (status === "accepted") {
-    const hostels = getHostels();
-    const hostelsUpdated = hostels.map((hostel) => {
-      if (hostel.id !== target.hostelId) return hostel;
-      return {
-        ...hostel,
-        rooms: hostel.rooms.map((room) => {
-          if (room.type !== target.roomType) return room;
-          return { ...room, available: Math.max(0, room.available - 1) };
-        }),
-      };
-    });
-    writeJson(HOSTELS_KEY, hostelsUpdated);
-  }
-
-  return { ok: true };
 }

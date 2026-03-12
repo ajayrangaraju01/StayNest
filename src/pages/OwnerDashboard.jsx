@@ -1,44 +1,24 @@
 import { useMemo, useState } from "react";
-import { LOCATIONS } from "../data/hostels";
 
 const sidebarItems = [
   { id: "overview", label: "Overview" },
-  { id: "list", label: "List Hostel" },
   { id: "enquiries", label: "Booking Requests" },
   { id: "settings", label: "Settings" },
 ];
 
-function defaultListingForm() {
-  return {
-    name: "",
-    location: "",
-    city: "Hyderabad",
-    address: "",
-    gender: "Boys",
-    description: "",
-    amenitiesText: "WiFi, CCTV, Power Backup",
-    imageText:
-      "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&q=80, https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&q=80",
-    roomType: "3 Share",
-    roomPrice: "5000",
-    roomTotalBeds: "8",
-    distance: "",
-  };
-}
-
 export default function OwnerDashboard({
   ownerName = "Owner",
+  ownerPhone = "",
+  ownerRole = "owner",
   ownerStatus,
   hostels,
   requests,
-  onCreateListing,
   onRequestStatusChange,
   onBack,
   onToast,
   onLogout,
 }) {
   const [activeTab, setActiveTab] = useState("overview");
-  const [listingForm, setListingForm] = useState(defaultListingForm());
 
   const stats = useMemo(() => {
     const totalBeds = hostels.reduce(
@@ -58,48 +38,6 @@ export default function OwnerDashboard({
     };
   }, [hostels, requests]);
 
-  const handleListingSubmit = () => {
-    if (!listingForm.name || !listingForm.location || !listingForm.address || !listingForm.roomPrice) {
-      onToast("Please fill all required hostel fields.");
-      return;
-    }
-
-    const price = Number(listingForm.roomPrice);
-    const totalBeds = Number(listingForm.roomTotalBeds);
-    if (!price || !totalBeds) {
-      onToast("Room price and total beds must be valid numbers.");
-      return;
-    }
-
-    onCreateListing({
-      name: listingForm.name,
-      location: listingForm.location,
-      city: listingForm.city || "Hyderabad",
-      address: listingForm.address,
-      gender: listingForm.gender,
-      description: listingForm.description || "Description pending owner update.",
-      amenities: listingForm.amenitiesText
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-      images: listingForm.imageText
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-      rooms: [
-        {
-          type: listingForm.roomType,
-          price,
-          total: totalBeds,
-          available: totalBeds,
-        },
-      ],
-      distance: listingForm.distance || "Distance not set",
-    });
-
-    setListingForm(defaultListingForm());
-    setActiveTab("overview");
-  };
 
   return (
     <div className="dashboard">
@@ -145,6 +83,31 @@ export default function OwnerDashboard({
 
         {activeTab === "overview" && (
           <>
+            <div className="form-section" style={{ marginBottom: 18 }}>
+              <div className="form-section-title">Owner Profile</div>
+              <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
+                <div>
+                  Name:
+                  {" "}
+                  <strong>{ownerName}</strong>
+                </div>
+                <div>
+                  Phone:
+                  {" "}
+                  <strong>{ownerPhone || "Not provided"}</strong>
+                </div>
+                <div>
+                  Role:
+                  {" "}
+                  <strong>{ownerRole}</strong>
+                </div>
+                <div>
+                  Status:
+                  {" "}
+                  <strong>{ownerStatus}</strong>
+                </div>
+              </div>
+            </div>
             <div className="stats-row">
               {[
                 { label: "Your Hostels", num: stats.totalHostels },
@@ -187,6 +150,34 @@ export default function OwnerDashboard({
                     {" "}
                     {hostel.gender}
                   </div>
+                  <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
+                    {hostel.address}
+                  </div>
+                  <div style={{ fontSize: 13, marginTop: 6 }}>
+                    Contact:
+                    {" "}
+                    <strong>{hostel.contact_number || "Not provided"}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    Amenities:
+                    {" "}
+                    {(hostel.amenities && hostel.amenities.length > 0)
+                      ? hostel.amenities.join(", ")
+                      : "Not provided"}
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    Rooms:
+                    {" "}
+                    {(hostel.rooms && hostel.rooms.length > 0)
+                      ? hostel.rooms.map((room) =>
+                        `${room.type} - INR ${room.price} (${room.available}/${room.total} beds)`).join(", ")
+                      : "Not provided"}
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    Photos:
+                    {" "}
+                    {hostel.images ? hostel.images.length : 0}
+                  </div>
                   <div style={{ marginTop: 8, fontSize: 12 }}>
                     Status:
                     {" "}
@@ -198,141 +189,6 @@ export default function OwnerDashboard({
           </>
         )}
 
-        {activeTab === "list" && (
-          <>
-            <div className="form-section">
-              <div className="form-section-title">Create Hostel Listing</div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label className="form-label">Hostel Name</label>
-                  <input
-                    className="form-input"
-                    value={listingForm.name}
-                    onChange={(event) => setListingForm({ ...listingForm, name: event.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Location / Area</label>
-                  <select
-                    className="form-select"
-                    value={listingForm.location}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, location: event.target.value })}
-                  >
-                    <option value="">Select area</option>
-                    {LOCATIONS.slice(1).map((location) => (
-                      <option key={location} value={location}>
-                        {location}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">City</label>
-                  <input
-                    className="form-input"
-                    value={listingForm.city}
-                    onChange={(event) => setListingForm({ ...listingForm, city: event.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Hostel Type</label>
-                  <select
-                    className="form-select"
-                    value={listingForm.gender}
-                    onChange={(event) => setListingForm({ ...listingForm, gender: event.target.value })}
-                  >
-                    <option>Boys</option>
-                    <option>Girls</option>
-                    <option>Co-ed</option>
-                  </select>
-                </div>
-                <div className="form-group full">
-                  <label className="form-label">Address</label>
-                  <input
-                    className="form-input"
-                    value={listingForm.address}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, address: event.target.value })}
-                  />
-                </div>
-                <div className="form-group full">
-                  <label className="form-label">Description</label>
-                  <textarea
-                    className="form-textarea"
-                    value={listingForm.description}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, description: event.target.value })}
-                  />
-                </div>
-                <div className="form-group full">
-                  <label className="form-label">Amenities (comma separated)</label>
-                  <input
-                    className="form-input"
-                    value={listingForm.amenitiesText}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, amenitiesText: event.target.value })}
-                  />
-                </div>
-                <div className="form-group full">
-                  <label className="form-label">Image URLs (comma separated)</label>
-                  <textarea
-                    className="form-textarea"
-                    value={listingForm.imageText}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, imageText: event.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Room Type</label>
-                  <select
-                    className="form-select"
-                    value={listingForm.roomType}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, roomType: event.target.value })}
-                  >
-                    {["Single", "2 Share", "3 Share", "4 Share", "5 Share"].map((type) => (
-                      <option key={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Room Price (INR)</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    value={listingForm.roomPrice}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, roomPrice: event.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Total Beds</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    value={listingForm.roomTotalBeds}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, roomTotalBeds: event.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Distance</label>
-                  <input
-                    className="form-input"
-                    value={listingForm.distance}
-                    onChange={(event) =>
-                      setListingForm({ ...listingForm, distance: event.target.value })}
-                    placeholder="e.g. 0.8 km from Metro"
-                  />
-                </div>
-              </div>
-            </div>
-            <button className="submit-btn" onClick={handleListingSubmit}>
-              Submit for Verification
-            </button>
-          </>
-        )}
 
         {activeTab === "enquiries" && (
           <div className="form-section">

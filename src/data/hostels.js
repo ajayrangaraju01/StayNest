@@ -161,4 +161,5 @@ export const roomIcons = {
   "3 Share": "R3",
   "4 Share": "R4",
   "5 Share": "R5",
+  "6 Share": "R6",
 };

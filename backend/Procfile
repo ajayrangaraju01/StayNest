@@ -1,0 +1,1 @@
+web: gunicorn staynest_backend.wsgi

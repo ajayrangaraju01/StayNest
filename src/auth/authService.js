@@ -1,6 +1,8 @@
-const USERS_KEY = "staynest_users";
+import { authLogin, authMe, authRegister } from "../api/staynestApi";
+
 const SESSION_KEY = "staynest_session";
-const OTP_STORE_KEY = "staynest_otp_store";
+const ACCESS_KEY = "staynest_access_token";
+const REFRESH_KEY = "staynest_refresh_token";
 
 function readJson(key, fallback) {
   const raw = localStorage.getItem(key);
@@ -23,22 +25,6 @@ function normalizePhone(phone) {
   return "";
 }
 
-function otpStore() {
-  return readJson(OTP_STORE_KEY, {});
-}
-
-function saveOtpStore(store) {
-  writeJson(OTP_STORE_KEY, store);
-}
-
-function usersStore() {
-  return readJson(USERS_KEY, []);
-}
-
-function saveUsersStore(users) {
-  writeJson(USERS_KEY, users);
-}
-
 function saveSession(session) {
   if (!session) {
     localStorage.removeItem(SESSION_KEY);
@@ -52,102 +38,86 @@ function toSession(user) {
     id: user.id,
     name: user.name,
     phone: user.phone,
-    role: user.role,
+    role: user.role === "student" ? "guest" : user.role,
     status: user.status,
   };
-}
-
-function verifyOtp(phone, otp) {
-  const normalizedPhone = normalizePhone(phone);
-  const store = otpStore();
-  const record = store[normalizedPhone];
-  if (!record) return false;
-
-  const isExpired = Date.now() > record.expiresAt;
-  if (isExpired) return false;
-
-  return record.otp === `${otp || ""}`.trim();
 }
 
 export function getSession() {
   return readJson(SESSION_KEY, null);
 }
 
-export function sendOtp({ phone }) {
-  const normalizedPhone = normalizePhone(phone);
-  if (!normalizedPhone) {
-    return { ok: false, error: "Enter a valid 10-digit mobile number." };
-  }
-
-  const code = `${Math.floor(100000 + Math.random() * 900000)}`;
-  const store = otpStore();
-  store[normalizedPhone] = {
-    otp: code,
-    expiresAt: Date.now() + 5 * 60 * 1000,
-    createdAt: Date.now(),
-  };
-  saveOtpStore(store);
-
-  return { ok: true, otp: code };
+function saveTokens({ access, refresh }) {
+  if (access) localStorage.setItem(ACCESS_KEY, access);
+  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
 }
 
-export function signUp({ name, phone, otp, role }) {
+function clearTokens() {
+  localStorage.removeItem(ACCESS_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+}
+
+export async function signUp({ name, phone, password, role, hostel }) {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone) {
     return { ok: false, error: "Enter a valid mobile number." };
   }
-
-  if (!verifyOtp(normalizedPhone, otp)) {
-    return { ok: false, error: "Invalid or expired OTP." };
+  if (!password || password.length < 6) {
+    return { ok: false, error: "Password must be at least 6 characters." };
   }
 
-  const users = usersStore();
-  const existing = users.find((user) => user.phone === normalizedPhone);
-  if (existing) {
-    return { ok: false, error: "This mobile number is already registered." };
+  try {
+    const apiRole = role === "guest" ? "student" : role;
+    const payload = {
+      phone: normalizedPhone,
+      name: name.trim(),
+      role: apiRole,
+      status: apiRole === "owner" ? "pending" : "active",
+      verification_state: apiRole === "owner" ? "pending" : "unverified",
+      password,
+    };
+    if (hostel && apiRole === "owner") {
+      payload.hostel = hostel;
+    }
+    const user = await authRegister(payload);
+    const tokens = await authLogin({ phone: normalizedPhone, password });
+    saveTokens(tokens);
+    const session = toSession(user);
+    saveSession(session);
+    return { ok: true, session };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to create account." };
   }
-
-  const user = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    phone: normalizedPhone,
-    role,
-    status: role === "owner" ? "pending_verification" : "active",
-    createdAt: new Date().toISOString(),
-  };
-
-  saveUsersStore([user, ...users]);
-  const session = toSession(user);
-  saveSession(session);
-  return { ok: true, session };
 }
 
-export function signIn({ phone, otp, role }) {
+export async function signIn({ phone, password, role }) {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone) {
     return { ok: false, error: "Enter a valid mobile number." };
   }
-
-  if (!verifyOtp(normalizedPhone, otp)) {
-    return { ok: false, error: "Invalid or expired OTP." };
+  if (!password) {
+    return { ok: false, error: "Enter your password." };
   }
 
-  const users = usersStore();
-  const user = users.find((item) => item.phone === normalizedPhone);
-
-  if (!user) return { ok: false, error: "No account found for this mobile number." };
-  if (user.role !== role) {
-    return { ok: false, error: `This account is registered as ${user.role}.` };
+  try {
+    const tokens = await authLogin({ phone: normalizedPhone, password });
+    saveTokens(tokens);
+    const user = await authMe();
+    if (role && user.role !== (role === "guest" ? "student" : role)) {
+      return { ok: false, error: `This account is registered as ${user.role}.` };
+    }
+    if (user.status === "suspended") {
+      return { ok: false, error: "Your account is suspended. Contact support." };
+    }
+    const session = toSession(user);
+    saveSession(session);
+    return { ok: true, session };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to login." };
   }
-  if (user.status === "suspended") {
-    return { ok: false, error: "Your account is suspended. Contact support." };
-  }
-
-  const session = toSession(user);
-  saveSession(session);
-  return { ok: true, session };
 }
 
 export function signOut() {
   saveSession(null);
+  clearTokens();
 }

@@ -34,27 +34,9 @@ Every push to `main` will auto-deploy.
 
 Alternatives: Netlify or Render static site deployment.
 
-## Backend/API Recommendation
+## Backend (Django + DRF)
 
-For a first release:
-- `Node.js + Express` on Railway/Render, or
-- `Next.js API routes` if you want frontend + API in one repo.
-
-Responsibilities:
-- Auth
-- Bookings
-- Enquiries
-- Owner management
-- Menu/room updates
-
-## Database Recommendation (StayNest)
-
-Use `PostgreSQL` via Supabase.
-
-Why:
-- Relational model fits owner -> hostel -> room -> booking flows.
-- Built-in auth and storage reduce setup time.
-- Free tier is enough to launch MVP.
+The backend lives in `backend/` and uses JWT auth.
 
 ### Starter Schema
 
@@ -87,3 +69,39 @@ For India launch flows: Razorpay is a practical default.
 ## Product Document
 
 Detailed PRD is available at [`docs/StayNest-PRD.md`](/c:/Users/Ajay/Desktop/StayNest/docs/StayNest-PRD.md).
+
+## Backend (Django + DRF)
+
+The backend now lives in `backend/`.
+
+### Setup (Local)
+
+```bash
+python -m pip install -r backend/requirements.txt
+python backend/manage.py migrate
+python backend/manage.py runserver
+```
+
+### API
+
+- Health check: `GET /api/health/`
+- Hostels: `GET/POST /api/hostels/`
+- Rooms: `GET/POST /api/rooms/`
+- Bookings: `GET/POST /api/bookings/`
+- Users: `GET/POST /api/users/`
+- Auth register: `POST /api/auth/register/`
+- Auth login: `POST /api/auth/login/`
+- Auth refresh: `POST /api/auth/refresh/`
+- Auth me: `GET /api/auth/me/`
+
+### Deployment (Cheap + Best Default)
+
+Backend: Render (free/low-cost) + Postgres  
+Frontend: Vercel (free)
+
+Required backend env vars:
+- `DJANGO_SECRET_KEY`
+- `DJANGO_DEBUG=false`
+- `DJANGO_ALLOWED_HOSTS=<your-backend-domain>`
+- `CORS_ALLOWED_ORIGINS=<your-frontend-domain>`
+- `DATABASE_URL=<render-postgres-url>`
