@@ -5,7 +5,9 @@ import {
   fetchBookings,
   fetchHostels,
   fetchRooms,
+  updateHostel,
   updateBooking,
+  updateRoom,
 } from "../api/staynestApi";
 import { HOSTELS } from "./hostels";
 
@@ -86,6 +88,12 @@ function mapHostelForUi(hostel, rooms) {
     city: hostel.city,
     address: hostel.address,
     contact_number: hostel.contact_number || "",
+    pincode: hostel.pincode || "",
+    rules: hostel.rules || "",
+    total_floors: hostel.total_floors || null,
+    rooms_per_floor: hostel.rooms_per_floor || [],
+    total_rooms: hostel.total_rooms || null,
+    floor_room_counts: hostel.floor_room_counts || [],
     rating,
     reviews,
     description: hostel.description || "",
@@ -201,15 +209,17 @@ export async function getOwnerBookingRequests(ownerId, hostels = []) {
       hostelName: hostels.find((hostel) => hostel.id === booking.hostel)?.name || "Hostel",
       studentId: booking.student,
       studentName: "Student",
+      studentPhone: booking.student_phone || "",
       roomType: booking.room ? roomTypeById[booking.room] || "Room" : "Room",
       moveInDate: booking.move_in_date,
       message: booking.message || "",
       status: mapBookingStatusToUi(booking.status),
+      statusRaw: booking.status,
       createdAt: booking.created_at,
     }));
 }
 
-export async function getStudentBookingRequests(studentId) {
+export async function getStudentBookingRequests(studentId, hostels = []) {
   const [bookings, rooms] = await Promise.all([fetchBookings(), fetchRooms()]);
   const roomTypeById = rooms.reduce((acc, room) => {
     acc[room.id] = ROOM_TYPE_TO_UI[room.type] || room.type;
@@ -220,13 +230,14 @@ export async function getStudentBookingRequests(studentId) {
     .map((booking) => ({
       id: booking.id,
       hostelId: booking.hostel,
-      hostelName: "Hostel",
+      hostelName: hostels.find((hostel) => hostel.id === booking.hostel)?.name || "Hostel",
       studentId: booking.student,
       studentName: "Student",
       roomType: booking.room ? roomTypeById[booking.room] || "Room" : "Room",
       moveInDate: booking.move_in_date,
       message: booking.message || "",
       status: mapBookingStatusToUi(booking.status),
+      statusRaw: booking.status,
       createdAt: booking.created_at,
     }));
 }
@@ -236,6 +247,7 @@ export async function createBookingRequest({
   hostelName,
   studentId,
   studentName,
+  studentPhone,
   roomType,
   moveInDate,
   message,
@@ -251,6 +263,7 @@ export async function createBookingRequest({
     room: roomId || null,
     status: "requested",
     message: message?.trim() || "",
+    student_phone: studentPhone || "",
     move_in_date: moveInDate || null,
   };
 
@@ -264,10 +277,12 @@ export async function createBookingRequest({
         hostelName,
         studentId,
         studentName,
+        studentPhone,
         roomType,
         moveInDate,
         message: payload.message,
         status: "pending",
+        statusRaw: booking.status,
         createdAt: booking.created_at,
       },
     };
@@ -283,4 +298,12 @@ export async function updateBookingRequestStatus({ requestId, status }) {
   } catch (error) {
     return { ok: false, error: error.message || "Unable to update booking request." };
   }
+}
+
+export async function updateHostelDetails(hostelId, payload) {
+  return updateHostel(hostelId, payload);
+}
+
+export async function updateRoomDetails(roomId, payload) {
+  return updateRoom(roomId, payload);
 }

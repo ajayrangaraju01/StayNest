@@ -44,11 +44,11 @@ class RegisterView(APIView):
         if role == User.Role.ADMIN:
             return Response({"detail": "Cannot register admin account."}, status=status.HTTP_403_FORBIDDEN)
         if role == User.Role.OWNER:
-            data["status"] = User.Status.PENDING
-            data["verification_state"] = User.Verification.PENDING
+            data["status"] = User.Status.ACTIVE
+            data["verification_state"] = User.Verification.VERIFIED
         elif role == User.Role.STUDENT:
             data["status"] = User.Status.ACTIVE
-            data["verification_state"] = User.Verification.UNVERIFIED
+            data["verification_state"] = User.Verification.VERIFIED
 
         hostel_payload = data.get("hostel") if role == User.Role.OWNER else None
         if role == User.Role.OWNER and hostel_payload:
@@ -91,7 +91,7 @@ class RegisterView(APIView):
                     rules=hostel_payload.get("rules", ""),
                     contact_number=hostel_payload.get("contact_number", ""),
                     amenities=hostel_payload.get("amenities", []),
-                    moderation_status=Hostel.ModerationStatus.PENDING,
+                    moderation_status=Hostel.ModerationStatus.APPROVED,
                 )
                 for index, photo_url in enumerate(photos):
                     HostelPhoto.objects.create(hostel=hostel, url=photo_url, display_order=index)

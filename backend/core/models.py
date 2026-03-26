@@ -25,6 +25,10 @@ class Hostel(models.Model):
     rules = models.TextField(blank=True)
     contact_number = models.CharField(max_length=20, blank=True)
     amenities = models.JSONField(default=list, blank=True)
+    total_floors = models.PositiveSmallIntegerField(null=True, blank=True)
+    rooms_per_floor = models.JSONField(default=list, blank=True)
+    total_rooms = models.PositiveSmallIntegerField(null=True, blank=True)
+    floor_room_counts = models.JSONField(default=list, blank=True)
     geo_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     geo_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     moderation_status = models.CharField(
@@ -41,7 +45,7 @@ class Hostel(models.Model):
 
 class HostelPhoto(models.Model):
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="photos")
-    url = models.URLField()
+    url = models.TextField()
     display_order = models.PositiveSmallIntegerField(default=0)
 
     def __str__(self):
@@ -82,8 +86,14 @@ class Booking(models.Model):
     room = models.ForeignKey(Room, on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
     message = models.TextField(blank=True)
+    student_phone = models.CharField(max_length=20, blank=True)
     move_in_date = models.DateField(null=True, blank=True)
     move_out_date = models.DateField(null=True, blank=True)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_bookings")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="rejected_bookings")
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    status_updated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

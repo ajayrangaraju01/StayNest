@@ -3,7 +3,7 @@ import { useAuth } from "../auth/useAuth";
 
 const ROLE_META = {
   owner: { title: "Hostel Owner", subtitle: "Manage listings, menus, enquiries, and bookings." },
-  guest: { title: "Guest", subtitle: "Find hostels and send booking requests." },
+  guest: { title: "Student/Guest", subtitle: "Find hostels and send booking requests." },
 };
 
 const ROOM_FIELDS = [
@@ -14,7 +14,13 @@ const ROOM_FIELDS = [
   { label: "6 Share", type: "six", bedsKey: "room6Beds", priceKey: "room6Price" },
 ];
 
-export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hideGuest = false }) {
+export default function AuthPage({
+  defaultRole = "guest",
+  onBack,
+  onSuccess,
+  hideGuest = false,
+  hideOwner = false,
+}) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState("login");
   const [role, setRole] = useState(defaultRole);
@@ -32,8 +38,7 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hid
     hostelDescription: "",
     hostelRules: "",
     hostelAmenities: "WiFi, CCTV, Power Backup",
-    hostelPhotos:
-      "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&q=80",
+    hostelPhotoFiles: [],
     room2Beds: "",
     room2Price: "",
     room3Beds: "",
@@ -48,11 +53,34 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hid
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const handlePhotoFiles = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) {
+      setForm({ ...form, hostelPhotoFiles: [] });
+      return;
+    }
+    const readers = files.map((file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Unable to read file."));
+      reader.readAsDataURL(file);
+    }));
+    try {
+      const results = await Promise.all(readers);
+      setForm({ ...form, hostelPhotoFiles: results });
+    } catch {
+      setError("Unable to read one or more images.");
+    }
+  };
+
   useEffect(() => {
     if (hideGuest && role !== "owner") {
       setRole("owner");
     }
-  }, [hideGuest, role]);
+    if (hideOwner && role !== "guest") {
+      setRole("guest");
+    }
+  }, [hideGuest, hideOwner, role]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -75,10 +103,7 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hid
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
-      const photos = form.hostelPhotos
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
+      const photos = form.hostelPhotoFiles || [];
       const rooms = ROOM_FIELDS.map((field) => {
         const beds = Number(form[field.bedsKey] || 0);
         const price = Number(form[field.priceKey] || 0);
@@ -96,7 +121,7 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hid
         return;
       }
       if (photos.length === 0) {
-        setError("Please provide at least one hostel photo URL.");
+        setError("Please upload at least one hostel photo.");
         return;
       }
       if (rooms.length === 0) {
@@ -115,7 +140,7 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hid
         rules: form.hostelRules,
         contact_number: form.hostelContact,
         amenities,
-        photos,
+        photos: photos.map((url) => ({ url })),
         rooms,
       };
     }
@@ -145,7 +170,7 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hid
           <p className="auth-sub">{ROLE_META[role].subtitle}</p>
         </div>
 
-        {!hideGuest && (
+        {!hideGuest && !hideOwner && (
           <div className="auth-toggle-row">
             <button
               className={`filter-chip${role === "guest" ? " active" : ""}`}
@@ -304,12 +329,21 @@ export default function AuthPage({ defaultRole = "guest", onBack, onSuccess, hid
                 />
               </div>
               <div className="form-group full">
-                <label className="form-label">Photo URLs (comma separated)</label>
-                <textarea
-                  className="form-textarea"
-                  value={form.hostelPhotos}
-                  onChange={(event) => setForm({ ...form, hostelPhotos: event.target.value })}
+                <label className="form-label">Hostel/PG Photos</label>
+                <input
+                  className="form-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoFiles}
                 />
+                {form.hostelPhotoFiles.length > 0 && (
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    {form.hostelPhotoFiles.length}
+                    {" "}
+                    image(s) selected.
+                  </div>
+                )}
               </div>
 
               <div className="form-section-title" style={{ marginTop: 16 }}>Room Types</div>

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Booking, Hostel, HostelPhoto, Room
+from .models import Booking, Hostel, HostelPhoto, Notification, Room
 
 
 class HostelPhotoSerializer(serializers.ModelSerializer):
@@ -27,6 +27,10 @@ class HostelSerializer(serializers.ModelSerializer):
             "rules",
             "contact_number",
             "amenities",
+            "total_floors",
+            "rooms_per_floor",
+            "total_rooms",
+            "floor_room_counts",
             "geo_lat",
             "geo_lng",
             "moderation_status",
@@ -40,6 +44,17 @@ class HostelSerializer(serializers.ModelSerializer):
         for photo in photos_data:
             HostelPhoto.objects.create(hostel=hostel, **photo)
         return hostel
+
+    def update(self, instance, validated_data):
+        photos_data = validated_data.pop("photos", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if photos_data is not None:
+            HostelPhoto.objects.filter(hostel=instance).delete()
+            for photo in photos_data:
+                HostelPhoto.objects.create(hostel=instance, **photo)
+        return instance
 
 
 class RoomSerializer(serializers.ModelSerializer):
@@ -66,8 +81,37 @@ class BookingSerializer(serializers.ModelSerializer):
             "room",
             "status",
             "message",
+            "student_phone",
             "move_in_date",
             "move_out_date",
+            "approved_by",
+            "approved_at",
+            "rejected_by",
+            "rejected_at",
+            "status_updated_at",
+            "created_at",
+        )
+        read_only_fields = (
+            "approved_by",
+            "approved_at",
+            "rejected_by",
+            "rejected_at",
+            "status_updated_at",
+            "created_at",
+        )
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = (
+            "id",
+            "user",
+            "type",
+            "title",
+            "body",
+            "channel",
+            "status",
             "created_at",
         )
         read_only_fields = ("created_at",)

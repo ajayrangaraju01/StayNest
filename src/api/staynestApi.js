@@ -13,6 +13,16 @@ function getAccessToken() {
   return localStorage.getItem("staynest_access_token");
 }
 
+function getRefreshToken() {
+  return localStorage.getItem("staynest_refresh_token");
+}
+
+function setAccessToken(token) {
+  if (token) {
+    localStorage.setItem("staynest_access_token", token);
+  }
+}
+
 async function parseJsonSafe(response) {
   const text = await response.text();
   if (!text) return null;
@@ -27,7 +37,7 @@ async function apiFetch(path, options = {}) {
   const token = getAccessToken();
   const authHeaders = token && !options.skipAuth ? { Authorization: `Bearer ${token}` } : {};
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  let response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...authHeaders,
@@ -35,6 +45,32 @@ async function apiFetch(path, options = {}) {
     },
     ...options,
   });
+
+  if (response.status === 401 && !options.skipAuth && !options._retry) {
+    const refresh = getRefreshToken();
+    if (refresh) {
+      const refreshResponse = await fetch(`${API_BASE}/auth/refresh/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      });
+      if (refreshResponse.ok) {
+        const refreshPayload = await parseJsonSafe(refreshResponse);
+        if (refreshPayload?.access) {
+          setAccessToken(refreshPayload.access);
+          response = await fetch(`${API_BASE}${path}`, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${refreshPayload.access}`,
+              ...(options.headers || {}),
+            },
+            ...options,
+            _retry: true,
+          });
+        }
+      }
+    }
+  }
 
   if (!response.ok) {
     const payload = await parseJsonSafe(response);
@@ -67,12 +103,20 @@ export function createHostel(payload) {
   return apiPost("/hostels/", payload);
 }
 
+export function updateHostel(id, payload) {
+  return apiPatch(`/hostels/${id}/`, payload);
+}
+
 export function fetchRooms({ useAuth = false } = {}) {
   return apiFetch("/rooms/", { skipAuth: !useAuth });
 }
 
 export function createRoom(payload) {
   return apiPost("/rooms/", payload);
+}
+
+export function updateRoom(id, payload) {
+  return apiPatch(`/rooms/${id}/`, payload);
 }
 
 export function fetchBookings() {
@@ -116,4 +160,16 @@ export function authRefresh(payload) {
 
 export function authMe() {
   return apiGet("/auth/me/");
+}
+
+export function fetchOwnerStudents() {
+  return apiGet("/owner/students/");
+}
+
+export function fetchStudentOverview() {
+  return apiGet("/student/overview/");
+}
+
+export function fetchNotifications() {
+  return apiGet("/notifications/");
 }

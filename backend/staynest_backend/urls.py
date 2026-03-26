@@ -20,17 +20,28 @@ from rest_framework.routers import DefaultRouter
 
 from accounts.views import LoginView, RegisterView, UserViewSet, me_view
 from rest_framework_simplejwt.views import TokenRefreshView
-from core.views import BookingViewSet, HostelViewSet, RoomViewSet, health_check
+from core.views import (
+    BookingViewSet,
+    HostelViewSet,
+    NotificationViewSet,
+    RoomViewSet,
+    health_check,
+    owner_students,
+    student_overview,
+)
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'hostels', HostelViewSet, basename='hostel')
 router.register(r'rooms', RoomViewSet, basename='room')
 router.register(r'bookings', BookingViewSet, basename='booking')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health/', health_check),
+    path('api/owner/students/', owner_students),
+    path('api/student/overview/', student_overview),
     path('api/auth/register/', RegisterView.as_view()),
     path('api/auth/login/', LoginView.as_view()),
     path('api/auth/refresh/', TokenRefreshView.as_view()),
