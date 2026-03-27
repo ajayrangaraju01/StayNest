@@ -4,6 +4,7 @@ import {
   createRoom,
   fetchBookings,
   fetchHostels,
+  fetchMenus,
   fetchRooms,
   updateHostel,
   updateBooking,
@@ -62,51 +63,64 @@ function mapRoomsForUi(rooms) {
   }));
 }
 
-function mapHostelForUi(hostel, rooms) {
+function mapHostelForUi(hostel, rooms, menu = DEFAULT_MENU) {
+  const pending = hostel.pending_update || null;
+  const effectiveHostel = pending
+    ? {
+      ...hostel,
+      ...pending,
+    }
+    : hostel;
   const photos = hostel.photos?.length
-    ? hostel.photos.map((photo) => photo.url)
+    ? (pending?.photos?.length
+      ? pending.photos.map((photo) => photo.url)
+      : hostel.photos.map((photo) => photo.url))
     : DEFAULT_IMAGES;
-  const amenities = hostel.amenities?.length
-    ? hostel.amenities
+  const amenities = effectiveHostel.amenities?.length
+    ? effectiveHostel.amenities
     : ["WiFi", "CCTV", "Power Backup"];
-  const menu = DEFAULT_MENU;
   const rating = 0;
   const reviews = 0;
-  const distance = hostel.city ? `${hostel.city} listing` : "Location available";
+  const distance = effectiveHostel.city ? `${effectiveHostel.city} listing` : "Location available";
+  const effectiveRooms = pending?.rooms?.length
+    ? mapRoomsForUi(pending.rooms.map((room) => ({ hostel: hostel.id, ...room })))
+    : rooms;
 
   return {
     id: hostel.id,
     ownerId: hostel.owner,
     owner: "Owner",
-    name: hostel.name,
-    location: hostel.area,
-    city: hostel.city,
-    address: hostel.address,
-    contact_number: hostel.contact_number || "",
-    pincode: hostel.pincode || "",
-    rules: hostel.rules || "",
-    total_floors: hostel.total_floors || null,
-    rooms_per_floor: hostel.rooms_per_floor || [],
-    total_rooms: hostel.total_rooms || null,
-    floor_room_counts: hostel.floor_room_counts || [],
+    name: effectiveHostel.name,
+    location: effectiveHostel.area,
+    city: effectiveHostel.city,
+    address: effectiveHostel.address,
+    contact_number: effectiveHostel.contact_number || "",
+    pincode: effectiveHostel.pincode || "",
+    rules: effectiveHostel.rules || "",
+    total_floors: effectiveHostel.total_floors || null,
+    rooms_per_floor: effectiveHostel.rooms_per_floor || [],
+    total_rooms: effectiveHostel.total_rooms || null,
+    floor_room_counts: effectiveHostel.floor_room_counts || [],
     rating,
     reviews,
-    description: hostel.description || "",
+    description: effectiveHostel.description || "",
     amenities,
     images: photos,
-    rooms,
+    rooms: effectiveRooms,
     menu,
     verified: hostel.moderation_status === "approved",
     moderationStatus: hostel.moderation_status,
-    gender: mapGenderToUi(hostel.gender_type),
+    gender: mapGenderToUi(effectiveHostel.gender_type),
     distance,
+    hasPendingChanges: hostel.has_pending_changes || false,
   };
 }
 
 export async function getHostels({ useAuth = false } = {}) {
-  const [hostels, rooms] = await Promise.all([
+  const [hostels, rooms, menus] = await Promise.all([
     fetchHostels({ useAuth }),
     fetchRooms({ useAuth }),
+    fetchMenus({ useAuth }).catch(() => []),
   ]);
   const roomsByHostel = rooms.reduce((acc, room) => {
     const list = acc[room.hostel] || [];
@@ -114,9 +128,34 @@ export async function getHostels({ useAuth = false } = {}) {
     acc[room.hostel] = list;
     return acc;
   }, {});
+  const menuByHostel = (menus || []).reduce((acc, menu) => {
+    const existing = acc[menu.hostel];
+    if (!existing) {
+      acc[menu.hostel] = menu;
+      return acc;
+    }
+    if (menu.is_override && !existing.is_override) {
+      acc[menu.hostel] = menu;
+      return acc;
+    }
+    if (menu.date > existing.date) {
+      acc[menu.hostel] = menu;
+    }
+    return acc;
+  }, {});
 
   return hostels.map((hostel) =>
-    mapHostelForUi(hostel, mapRoomsForUi(roomsByHostel[hostel.id] || [])),
+    mapHostelForUi(
+      hostel,
+      mapRoomsForUi(roomsByHostel[hostel.id] || []),
+      menuByHostel[hostel.id]
+        ? {
+          breakfast: menuByHostel[hostel.id].breakfast || DEFAULT_MENU.breakfast,
+          lunch: menuByHostel[hostel.id].lunch || DEFAULT_MENU.lunch,
+          dinner: menuByHostel[hostel.id].dinner || DEFAULT_MENU.dinner,
+        }
+        : DEFAULT_MENU,
+    ),
   );
 }
 

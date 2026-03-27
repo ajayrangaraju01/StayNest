@@ -59,6 +59,74 @@ def sync_room_occupancy(room_ids=None):
             room.save(update_fields=["occupied_beds"])
 
 
+def apply_pending_hostel_update(hostel):
+    pending = hostel.pending_update or {}
+    if not pending:
+        return
+
+    photos_data = pending.pop("photos", None)
+    room_drafts = pending.pop("rooms", [])
+    allowed_fields = {
+        "name",
+        "address",
+        "area",
+        "city",
+        "pincode",
+        "gender_type",
+        "description",
+        "rules",
+        "contact_number",
+        "amenities",
+        "total_floors",
+        "rooms_per_floor",
+        "total_rooms",
+        "floor_room_counts",
+        "geo_lat",
+        "geo_lng",
+    }
+    for attr, value in pending.items():
+        if attr in allowed_fields:
+            setattr(hostel, attr, value)
+    hostel.pending_update = None
+    hostel.moderation_status = Hostel.ModerationStatus.APPROVED
+    hostel.save()
+
+    if photos_data is not None:
+        HostelPhoto.objects.filter(hostel=hostel).delete()
+        for photo in photos_data:
+            HostelPhoto.objects.create(hostel=hostel, **photo)
+
+    synced_room_ids = []
+    for room_payload in room_drafts:
+        room = None
+        room_id = room_payload.get("id")
+        if room_id:
+            room = Room.objects.filter(id=room_id, hostel=hostel).first()
+        if not room:
+            room = Room.objects.filter(hostel=hostel, type=room_payload.get("type"), room_number="").order_by("id").first()
+
+        payload = {
+            "type": room_payload.get("type"),
+            "monthly_rent": room_payload.get("monthly_rent", 0),
+            "booking_advance": room_payload.get("booking_advance", 0),
+            "security_deposit": room_payload.get("security_deposit", 0),
+            "total_beds": room_payload.get("total_beds", 0),
+            "occupied_beds": room_payload.get("occupied_beds", 0),
+            "is_maintenance": room_payload.get("is_maintenance", False),
+            "room_number": room_payload.get("room_number", ""),
+        }
+        if room:
+            for attr, value in payload.items():
+                setattr(room, attr, value)
+            room.save()
+        else:
+            room = Room.objects.create(hostel=hostel, **payload)
+        synced_room_ids.append(room.id)
+
+    if synced_room_ids:
+        sync_room_occupancy(synced_room_ids)
+
+
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def health_check(request):
@@ -550,7 +618,10 @@ def admin_hostel_queue(request):
     if request.user.role != User.Role.ADMIN:
         return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
     hostels = (
-        Hostel.objects.filter(moderation_status=Hostel.ModerationStatus.PENDING)
+        Hostel.objects.filter(
+            models.Q(moderation_status=Hostel.ModerationStatus.PENDING)
+            | models.Q(pending_update__isnull=False)
+        )
         .select_related("owner")
         .prefetch_related("photos")
         .order_by("-created_at")
@@ -580,9 +651,19 @@ def admin_update_hostel_moderation(request, hostel_id):
     if next_status not in dict(Hostel.ModerationStatus.choices):
         return Response({"detail": "Invalid moderation status."}, status=status.HTTP_400_BAD_REQUEST)
 
+    if hostel.pending_update:
+        if next_status == Hostel.ModerationStatus.APPROVED:
+            apply_pending_hostel_update(hostel)
+            return Response(AdminHostelSerializer(hostel, context={"request": request}).data)
+        if next_status == Hostel.ModerationStatus.REJECTED:
+            hostel.pending_update = None
+            hostel.moderation_status = Hostel.ModerationStatus.APPROVED
+            hostel.save(update_fields=["pending_update", "moderation_status"])
+            return Response(AdminHostelSerializer(hostel, context={"request": request}).data)
+
     hostel.moderation_status = next_status
     hostel.save(update_fields=["moderation_status"])
-    return Response(AdminHostelSerializer(hostel).data)
+    return Response(AdminHostelSerializer(hostel, context={"request": request}).data)
 
 
 @api_view(["GET"])
@@ -856,6 +937,11 @@ class HostelViewSet(viewsets.ModelViewSet):
             kwargs["partial"] = True
             instance = self.get_object()
             update_payload = request.data.copy()
+            if instance.moderation_status == Hostel.ModerationStatus.APPROVED:
+                instance.pending_update = dict(update_payload)
+                instance.save(update_fields=["pending_update"])
+                serializer = self.get_serializer(instance)
+                return Response(serializer.data)
             update_payload["moderation_status"] = Hostel.ModerationStatus.PENDING
             serializer = self.get_serializer(instance, data=update_payload, partial=True)
             serializer.is_valid(raise_exception=True)
@@ -1086,10 +1172,17 @@ class MenuViewSet(viewsets.ModelViewSet):
     serializer_class = MenuSerializer
 
     def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
         user = self.request.user
+        if not user.is_authenticated:
+            return self.queryset.filter(
+                hostel__moderation_status=Hostel.ModerationStatus.APPROVED,
+                hostel__is_active=True,
+            )
         if user.role == User.Role.ADMIN:
             return self.queryset
         if user.role == User.Role.OWNER:

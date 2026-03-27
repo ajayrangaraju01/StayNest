@@ -31,6 +31,7 @@ class Hostel(models.Model):
     floor_room_counts = models.JSONField(default=list, blank=True)
     geo_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     geo_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    pending_update = models.JSONField(null=True, blank=True)
     moderation_status = models.CharField(
         max_length=20,
         choices=ModerationStatus.choices,

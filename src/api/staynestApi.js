@@ -279,8 +279,8 @@ export function createFeePayment(payload) {
   return apiPost("/fee-payments/", payload);
 }
 
-export function fetchMenus() {
-  return apiGet("/menus/");
+export function fetchMenus({ useAuth = true } = {}) {
+  return apiFetch("/menus/", { skipAuth: !useAuth });
 }
 
 export function createMenu(payload) {

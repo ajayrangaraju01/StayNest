@@ -24,6 +24,8 @@ class HostelPhotoSerializer(serializers.ModelSerializer):
 
 class HostelSerializer(serializers.ModelSerializer):
     photos = HostelPhotoSerializer(many=True, required=False)
+    pending_update = serializers.SerializerMethodField()
+    has_pending_changes = serializers.SerializerMethodField()
 
     class Meta:
         model = Hostel
@@ -46,10 +48,25 @@ class HostelSerializer(serializers.ModelSerializer):
             "floor_room_counts",
             "geo_lat",
             "geo_lng",
+            "pending_update",
+            "has_pending_changes",
             "moderation_status",
             "is_active",
             "photos",
         )
+
+    def get_pending_update(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        if request.user.role == "admin":
+            return obj.pending_update
+        if request.user.role == "owner" and obj.owner_id == request.user.id:
+            return obj.pending_update
+        return None
+
+    def get_has_pending_changes(self, obj):
+        return bool(obj.pending_update)
 
     def create(self, validated_data):
         photos_data = validated_data.pop("photos", [])

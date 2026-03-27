@@ -50,6 +50,23 @@ export default function OwnerDashboard({
   onLogout,
   onRefreshHostels,
 }) {
+  const amenityOptions = [
+    "WiFi",
+    "AC",
+    "Laundry",
+    "CCTV",
+    "Power Backup",
+    "Hot Water",
+    "Parking",
+    "Lift",
+    "Housekeeping",
+    "Food Included",
+    "Water Purifier",
+    "Gym",
+    "Study Room",
+    "Common Kitchen",
+    "Co-working Space",
+  ];
   const shareTypeConfig = [
     { key: "double", label: "2 Share", beds: 2 },
     { key: "triple", label: "3 Share", beds: 3 },
@@ -66,6 +83,7 @@ export default function OwnerDashboard({
   const [students, setStudents] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [guestSortBy, setGuestSortBy] = useState("name");
+  const [showWalkinModal, setShowWalkinModal] = useState(false);
   const [guestDetailId, setGuestDetailId] = useState(null);
   const [guestEditForms, setGuestEditForms] = useState({});
   const [feeLedgers, setFeeLedgers] = useState([]);
@@ -218,7 +236,8 @@ export default function OwnerDashboard({
       contact_number: hostel.contact_number || "",
       description: hostel.description || "",
       rules: hostel.rules || "",
-      amenitiesText: (hostel.amenities || []).join(", "),
+      selectedAmenities: (hostel.amenities || []).filter((item) => amenityOptions.includes(item)),
+      customAmenitiesText: (hostel.amenities || []).filter((item) => !amenityOptions.includes(item)).join(", "),
       existingPhotos: hostel.images || [],
       newPhotoFiles: [],
       totalFloors: hostel.total_floors || "",
@@ -416,10 +435,13 @@ export default function OwnerDashboard({
         return;
       }
 
-      const amenities = editForm.amenitiesText
+      const amenities = [
+        ...(editForm.selectedAmenities || []),
+        ...(editForm.customAmenitiesText || "")
         .split(",")
         .map((item) => item.trim())
-        .filter(Boolean);
+        .filter(Boolean),
+      ];
       const photos = mergedPhotosPreview.map((url, index) => ({
         url,
         display_order: index,
@@ -443,8 +465,41 @@ export default function OwnerDashboard({
       if (photos.length > 0) {
         payload.photos = photos;
       }
+      const roomDrafts = editForm.rooms
+        .map((room) => {
+          const total = Number((calculatedRoomTotals[room.type] ?? room.total) || 0);
+          const available = Number(room.available || 0);
+          const occupied = Math.max(0, total - available);
+          return {
+            id: room.id,
+            type:
+              room.type === "Single" ? "single"
+              : room.type === "2 Share" ? "double"
+              : room.type === "3 Share" ? "triple"
+              : room.type === "4 Share" ? "four"
+              : room.type === "5 Share" ? "five"
+              : "six",
+            monthly_rent: Number(room.price || 0),
+            booking_advance: Number(room.bookingAdvance || 0),
+            security_deposit: Number(room.securityDeposit || 0),
+            total_beds: total,
+            occupied_beds: occupied,
+            is_maintenance: false,
+            room_number: "",
+          };
+        })
+        .filter((room) => Number(room.monthly_rent || 0) > 0 || Number(room.total_beds || 0) > 0);
+      payload.rooms = roomDrafts;
 
       await updateHostelDetails(editForm.id, payload);
+
+      if (selectedHostel?.moderationStatus === "approved") {
+        onToast("Changes submitted for admin approval. Guests will keep seeing the current approved listing until approval.");
+        if (onRefreshHostels) {
+          await onRefreshHostels();
+        }
+        return;
+      }
 
       await Promise.all(
         editForm.rooms.map((room) => {
@@ -521,7 +576,6 @@ export default function OwnerDashboard({
               phone: guest.student_phone || "",
               email: guest.student_email || "",
               age: guest.age || "",
-              gender: guest.gender || "",
               college_company: guest.college_company || "",
               emergency_contact: guest.emergency_contact || "",
             };
@@ -632,7 +686,6 @@ export default function OwnerDashboard({
         phone: form.phone,
         email: form.email,
         age: form.age ? Number(form.age) : null,
-        gender: form.gender,
         college_company: form.college_company,
         emergency_contact: form.emergency_contact,
         room_number: form.room_number,
@@ -792,6 +845,7 @@ export default function OwnerDashboard({
         emergency_contact: walkinForm.emergencyContact,
       });
       onToast("Walk-in guest added and checked in.");
+      setShowWalkinModal(false);
       setWalkinForm({
         name: "",
         phone: "",
@@ -1133,12 +1187,57 @@ export default function OwnerDashboard({
                     />
                   </div>
                   <div className="form-group full">
-                    <label className="form-label">Amenities (comma separated)</label>
-                    <input
-                      className="form-input"
-                      value={editForm.amenitiesText}
-                      onChange={(event) => setEditForm({ ...editForm, amenitiesText: event.target.value })}
-                    />
+                    <label className="form-label">Amenities</label>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: 10,
+                        padding: 14,
+                        border: "1.5px solid var(--cream-dark)",
+                        borderRadius: 10,
+                        background: "var(--cream)",
+                      }}
+                    >
+                      {amenityOptions.map((amenity) => {
+                        const checked = editForm.selectedAmenities?.includes(amenity);
+                        return (
+                          <label
+                            key={amenity}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              fontSize: 14,
+                              color: "var(--espresso)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                setEditForm({
+                                  ...editForm,
+                                  selectedAmenities: event.target.checked
+                                    ? [...(editForm.selectedAmenities || []), amenity]
+                                    : (editForm.selectedAmenities || []).filter((item) => item !== amenity),
+                                })}
+                            />
+                            <span>{amenity}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop: 12 }}>
+                      <label className="form-label">Other Amenities</label>
+                      <input
+                        className="form-input"
+                        value={editForm.customAmenitiesText}
+                        onChange={(event) => setEditForm({ ...editForm, customAmenitiesText: event.target.value })}
+                        placeholder="Add other amenities separated by commas"
+                      />
+                    </div>
                   </div>
                   <div className="form-group full">
                     <label className="form-label">Hostel/PG Photos</label>
@@ -1426,19 +1525,6 @@ export default function OwnerDashboard({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Gender</label>
-                <select
-                  className="form-select"
-                  value={guestEditForms[selectedGuest.student_id]?.gender || ""}
-                  onChange={(event) => handleGuestFieldChange(selectedGuest.student_id, "gender", event.target.value)}
-                >
-                  <option value="">Select</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div className="form-group">
                 <label className="form-label">College / Company</label>
                 <input
                   className="form-input"
@@ -1530,123 +1616,132 @@ export default function OwnerDashboard({
 
         {activeTab === "students" && !guestDetailId && (
           <>
-            <div className="form-section">
-              <div className="form-section-title">Add Walk-in Guest</div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label className="form-label">Full Name</label>
-                  <input className="form-input" value={walkinForm.name} onChange={(event) => setWalkinForm({ ...walkinForm, name: event.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Phone</label>
-                  <input className="form-input" value={walkinForm.phone} onChange={(event) => setWalkinForm({ ...walkinForm, phone: event.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Email</label>
-                  <input className="form-input" value={walkinForm.email} onChange={(event) => setWalkinForm({ ...walkinForm, email: event.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Hostel</label>
-                  <input className="form-input" value={selectedHostel?.name || ""} disabled />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Room Number</label>
-                  <input
-                    className="form-input"
-                    value={walkinForm.roomNumber}
-                    onChange={(event) => setWalkinForm({ ...walkinForm, roomNumber: event.target.value })}
-                    placeholder="Enter room number like 101 or A-2"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Type of Share</label>
-                  <select
-                    className="form-select"
-                    value={walkinForm.roomType}
-                    onChange={(event) => setWalkinForm({ ...walkinForm, roomType: event.target.value })}
-                  >
-                    <option value="single">Single</option>
-                    <option value="double">2 Share</option>
-                    <option value="triple">3 Share</option>
-                    <option value="four">4 Share</option>
-                    <option value="five">5 Share</option>
-                    <option value="six">6 Share</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Move-in Date</label>
-                  <input className="form-input" type="date" value={walkinForm.moveInDate} onChange={(event) => setWalkinForm({ ...walkinForm, moveInDate: event.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Joining Fee Status</label>
-                  <select
-                    className="form-select"
-                    value={walkinForm.joiningFeeStatus}
-                    onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeeStatus: event.target.value })}
-                    disabled={!isWalkinJoiningToday}
-                  >
-                    <option value="unpaid">Not Paid</option>
-                    <option value="partial">Partially Paid</option>
-                    <option value="paid">Paid</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Joining Fee Paid Amount</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    value={walkinForm.joiningFeePaid}
-                    onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeePaid: event.target.value })}
-                    placeholder={isWalkinJoiningToday ? "Enter paid amount for today" : "Auto-handled from join date"}
-                    disabled={!isWalkinJoiningToday || walkinForm.joiningFeeStatus === "unpaid"}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Payment Mode</label>
-                  <select
-                    className="form-select"
-                    value={walkinForm.joiningFeeMode}
-                    onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeeMode: event.target.value })}
-                    disabled={!isWalkinJoiningToday || walkinForm.joiningFeeStatus === "unpaid"}
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="upi">UPI</option>
-                    <option value="bank">Bank</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Payment Reference</label>
-                  <input
-                    className="form-input"
-                    value={walkinForm.joiningFeeReference}
-                    onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeeReference: event.target.value })}
-                    placeholder={isWalkinJoiningToday ? "Optional reference" : "Auto-paid for backdated joins"}
-                    disabled={!isWalkinJoiningToday || walkinForm.joiningFeeStatus === "unpaid"}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">College / Company</label>
-                  <input className="form-input" value={walkinForm.collegeCompany} onChange={(event) => setWalkinForm({ ...walkinForm, collegeCompany: event.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Emergency Contact</label>
-                  <input className="form-input" value={walkinForm.emergencyContact} onChange={(event) => setWalkinForm({ ...walkinForm, emergencyContact: event.target.value })} />
+            {showWalkinModal && (
+              <div className="overlay-shell" onClick={() => setShowWalkinModal(false)}>
+                <div className="overlay-card" onClick={(event) => event.stopPropagation()}>
+                  <div className="overlay-header">
+                    <div className="form-section-title" style={{ marginBottom: 0 }}>Add Walk-in Guest</div>
+                    <button className="nav-btn" type="button" onClick={() => setShowWalkinModal(false)}>
+                      Close
+                    </button>
+                  </div>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label className="form-label">Full Name</label>
+                      <input className="form-input" value={walkinForm.name} onChange={(event) => setWalkinForm({ ...walkinForm, name: event.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Phone</label>
+                      <input className="form-input" value={walkinForm.phone} onChange={(event) => setWalkinForm({ ...walkinForm, phone: event.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Email</label>
+                      <input className="form-input" value={walkinForm.email} onChange={(event) => setWalkinForm({ ...walkinForm, email: event.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Hostel</label>
+                      <input className="form-input" value={selectedHostel?.name || ""} disabled />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Room Number</label>
+                      <input
+                        className="form-input"
+                        value={walkinForm.roomNumber}
+                        onChange={(event) => setWalkinForm({ ...walkinForm, roomNumber: event.target.value })}
+                        placeholder="Enter room number like 101 or A-2"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Type of Share</label>
+                      <select
+                        className="form-select"
+                        value={walkinForm.roomType}
+                        onChange={(event) => setWalkinForm({ ...walkinForm, roomType: event.target.value })}
+                      >
+                        <option value="single">Single</option>
+                        <option value="double">2 Share</option>
+                        <option value="triple">3 Share</option>
+                        <option value="four">4 Share</option>
+                        <option value="five">5 Share</option>
+                        <option value="six">6 Share</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Move-in Date</label>
+                      <input className="form-input" type="date" value={walkinForm.moveInDate} onChange={(event) => setWalkinForm({ ...walkinForm, moveInDate: event.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Joining Fee Status</label>
+                      <select
+                        className="form-select"
+                        value={walkinForm.joiningFeeStatus}
+                        onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeeStatus: event.target.value })}
+                        disabled={!isWalkinJoiningToday}
+                      >
+                        <option value="unpaid">Not Paid</option>
+                        <option value="partial">Partially Paid</option>
+                        <option value="paid">Paid</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Joining Fee Paid Amount</label>
+                      <input
+                        className="form-input"
+                        type="number"
+                        value={walkinForm.joiningFeePaid}
+                        onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeePaid: event.target.value })}
+                        placeholder={isWalkinJoiningToday ? "Enter paid amount for today" : "Auto-handled from join date"}
+                        disabled={!isWalkinJoiningToday || walkinForm.joiningFeeStatus === "unpaid"}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Payment Mode</label>
+                      <select
+                        className="form-select"
+                        value={walkinForm.joiningFeeMode}
+                        onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeeMode: event.target.value })}
+                        disabled={!isWalkinJoiningToday || walkinForm.joiningFeeStatus === "unpaid"}
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="upi">UPI</option>
+                        <option value="bank">Bank</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Payment Reference</label>
+                      <input
+                        className="form-input"
+                        value={walkinForm.joiningFeeReference}
+                        onChange={(event) => setWalkinForm({ ...walkinForm, joiningFeeReference: event.target.value })}
+                        placeholder={isWalkinJoiningToday ? "Optional reference" : "Auto-paid for backdated joins"}
+                        disabled={!isWalkinJoiningToday || walkinForm.joiningFeeStatus === "unpaid"}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">College / Company</label>
+                      <input className="form-input" value={walkinForm.collegeCompany} onChange={(event) => setWalkinForm({ ...walkinForm, collegeCompany: event.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Emergency Contact</label>
+                      <input className="form-input" value={walkinForm.emergencyContact} onChange={(event) => setWalkinForm({ ...walkinForm, emergencyContact: event.target.value })} />
+                    </div>
+                  </div>
+                  {isWalkinBackdated && (
+                    <p style={{ marginTop: 12, color: "var(--warm-gray)", fontSize: 13 }}>
+                      This is a backdated join. Monthly fee ledger entries up to today will be auto-created as paid.
+                    </p>
+                  )}
+                  {isWalkinJoiningToday && (
+                    <p style={{ marginTop: 12, color: "var(--warm-gray)", fontSize: 13 }}>
+                      For today&apos;s join, choose whether the current month fee is unpaid, partially paid, or fully paid.
+                    </p>
+                  )}
+                  <button className="submit-btn" onClick={handleAddWalkinStudent} style={{ marginTop: 12 }}>
+                    Add Walk-in Guest
+                  </button>
                 </div>
               </div>
-              {isWalkinBackdated && (
-                <p style={{ marginTop: 12, color: "var(--warm-gray)", fontSize: 13 }}>
-                  This is a backdated join. Monthly fee ledger entries up to today will be auto-created as paid.
-                </p>
-              )}
-              {isWalkinJoiningToday && (
-                <p style={{ marginTop: 12, color: "var(--warm-gray)", fontSize: 13 }}>
-                  For today&apos;s join, choose whether the current month fee is unpaid, partially paid, or fully paid.
-                </p>
-              )}
-              <button className="submit-btn" onClick={handleAddWalkinStudent} style={{ marginTop: 12 }}>
-                Add Walk-in Guest
-              </button>
-            </div>
+            )}
 
             <div className="form-section">
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
@@ -1664,6 +1759,14 @@ export default function OwnerDashboard({
                   </select>
                 </div>
               </div>
+              <button
+                type="button"
+                className="floating-plus-btn"
+                onClick={() => setShowWalkinModal(true)}
+                aria-label="Add walk-in guest"
+              >
+                +
+              </button>
               {studentsLoading && (
                 <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>Loading guests...</p>
               )}
