@@ -62,8 +62,11 @@ class Room(models.Model):
         SIX = "six", "6 Share"
 
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="rooms")
+    room_number = models.CharField(max_length=40, blank=True)
     type = models.CharField(max_length=20, choices=RoomType.choices)
     monthly_rent = models.DecimalField(max_digits=10, decimal_places=2)
+    booking_advance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    security_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_beds = models.PositiveSmallIntegerField()
     occupied_beds = models.PositiveSmallIntegerField(default=0)
     is_maintenance = models.BooleanField(default=False)
@@ -84,6 +87,7 @@ class Booking(models.Model):
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name="bookings")
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bookings")
     room = models.ForeignKey(Room, on_delete=models.SET_NULL, null=True, blank=True)
+    assigned_room_number = models.CharField(max_length=40, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
     message = models.TextField(blank=True)
     student_phone = models.CharField(max_length=20, blank=True)
@@ -130,6 +134,7 @@ class FeePayment(models.Model):
     paid_at = models.DateTimeField(auto_now_add=True)
     receipt_url = models.URLField(blank=True)
     reference_id = models.CharField(max_length=80, blank=True)
+    razorpay_ref = models.CharField(max_length=120, blank=True)
 
 
 class Menu(models.Model):
@@ -138,6 +143,7 @@ class Menu(models.Model):
     breakfast = models.CharField(max_length=200, blank=True)
     lunch = models.CharField(max_length=200, blank=True)
     dinner = models.CharField(max_length=200, blank=True)
+    is_override = models.BooleanField(default=False)
 
 
 class MealOptOut(models.Model):
@@ -193,12 +199,15 @@ class Complaint(models.Model):
     reason = models.CharField(max_length=200)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     admin_decision = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ComplaintEvidence(models.Model):
     complaint = models.ForeignKey(Complaint, on_delete=models.CASCADE, related_name="evidence")
     file_url = models.URLField()
     submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class Review(models.Model):
@@ -215,7 +224,10 @@ class Review(models.Model):
     rating_facilities = models.PositiveSmallIntegerField(default=0)
     rating_value = models.PositiveSmallIntegerField(default=0)
     text = models.TextField(blank=True)
+    owner_reply = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class Notification(models.Model):

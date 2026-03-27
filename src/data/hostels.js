@@ -9,7 +9,7 @@ export const HOSTELS = [
     rating: 4.7,
     reviews: 128,
     description:
-      "A modern hostel with all amenities, located near KPHB Metro. Perfect for working professionals and students.",
+      "A modern hostel with all amenities, located near KPHB Metro. Perfect for working professionals and guests.",
     amenities: ["WiFi", "AC", "Laundry", "CCTV", "Water Purifier", "Power Backup"],
     images: [
       "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&q=80",
@@ -90,7 +90,7 @@ export const HOSTELS = [
       dinner: "North Indian Thali with seasonal sweets",
     },
     verified: false,
-    gender: "Co-ed",
+    gender: "Co-Live",
     distance: "0.3 km from Inorbit Mall",
   },
   {
@@ -103,7 +103,7 @@ export const HOSTELS = [
     rating: 4.1,
     reviews: 43,
     description:
-      "Budget-friendly hostel with home-cooked food and a garden courtyard. Ideal for students.",
+      "Budget-friendly hostel with home-cooked food and a garden courtyard. Ideal for guests.",
     amenities: ["WiFi", "Hot Water", "CCTV", "Common Kitchen", "Study Room"],
     images: [
       "https://images.unsplash.com/photo-1571508601891-ca5e7a713859?w=800&q=80",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./auth/useAuth";
 import Toast from "./components/Toast";
+import AdminDashboard from "./pages/AdminDashboard";
 import HomePage from "./pages/HomePage";
 import HostelDetail from "./pages/HostelDetail";
 import OwnerDashboard from "./pages/OwnerDashboard";
@@ -13,7 +14,6 @@ import {
   getStudentBookingRequests,
   updateBookingRequestStatus,
 } from "./data/appStore";
-import { HOSTELS } from "./data/hostels";
 import "./styles/staynest.css";
 
 export default function App() {
@@ -35,15 +35,10 @@ export default function App() {
     const useAuth = user?.role === "owner" || user?.role === "admin";
     try {
       const data = await getHostels({ useAuth });
-      if (data.length === 0) {
-        setHostels(HOSTELS);
-        showToast("No approved hostels yet. Showing sample listings.");
-      } else {
-        setHostels(data);
-      }
+      setHostels(data);
     } catch (error) {
-      setHostels(HOSTELS);
-      showToast("Backend not reachable. Showing sample data.");
+      setHostels([]);
+      showToast(error.message || "Backend not reachable.");
     } finally {
       setLoadingHostels(false);
     }
@@ -75,11 +70,16 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    if (page === "home" || page === "student") {
+      refreshHostels();
+    }
+  }, [page]);
+
+  useEffect(() => {
     refreshRequests();
   }, [user, hostels]);
   const publicHostels = useMemo(() => {
-    const approved = hostels.filter((hostel) => hostel.moderationStatus === "approved");
-    return approved.length > 0 ? approved : hostels;
+    return hostels.filter((hostel) => hostel.moderationStatus === "approved");
   }, [hostels]);
   const selectedHostel = useMemo(
     () => hostels.find((hostel) => hostel.id === selectedHostelId) || null,
@@ -94,6 +94,9 @@ export default function App() {
     }
     if (user?.role === "guest") {
       setPage("student");
+    }
+    if (user?.role === "admin") {
+      setPage("admin");
     }
   }, [user]);
 
@@ -116,6 +119,10 @@ export default function App() {
     showToast(`Welcome, ${session.name}!`);
     if (session.role === "owner") {
       setPage("owner");
+      return;
+    }
+    if (session.role === "admin") {
+      setPage("admin");
       return;
     }
     if (session.role === "guest") {
@@ -173,7 +180,7 @@ export default function App() {
 
   return (
     <div className="app">
-      {page !== "owner" && (
+      {page !== "owner" && page !== "admin" && (
         <nav className="nav">
           <div className="nav-logo" onClick={() => setPage("home")}>
             Stay
@@ -183,6 +190,11 @@ export default function App() {
             {user?.role !== "owner" && (
               <button className="nav-btn" onClick={() => setPage("home")}>
                 Browse Hostels
+              </button>
+            )}
+            {user?.role === "admin" && (
+              <button className="nav-btn" onClick={() => setPage("admin")}>
+                Admin Dashboard
               </button>
             )}
             <button
@@ -208,6 +220,18 @@ export default function App() {
               }}
             >
               {user?.role === "owner" ? "Owner Dashboard" : "Owner Login"}
+            </button>
+            <button
+              className="nav-btn"
+              onClick={() => {
+                if (user?.role === "admin") {
+                  setPage("admin");
+                  return;
+                }
+                setPage("admin");
+              }}
+            >
+              {user?.role === "admin" ? "Admin Dashboard" : "Admin Login"}
             </button>
             {user ? (
               <button
@@ -248,7 +272,7 @@ export default function App() {
           user={user}
           onBack={() => setPage(user?.role === "guest" ? "student" : "home")}
           onToast={showToast}
-          onRequireGuestLogin={() => openAuth("guest")}
+          onRequireStudentLogin={() => openAuth("guest")}
           onBookingRequest={handleBookingRequest}
         />
       )}
@@ -257,6 +281,7 @@ export default function App() {
         <StudentDashboard
           hostels={publicHostels}
           requests={studentRequests}
+          onToast={showToast}
           onHostelClick={(hostel) => {
             setSelectedHostelId(hostel.id);
             setPage("detail");
@@ -284,10 +309,31 @@ export default function App() {
         />
       )}
 
+      {page === "admin" && user?.role === "admin" && (
+        <AdminDashboard
+          adminName={user.name}
+          onToast={showToast}
+          onLogout={() => {
+            logout();
+            setPage("home");
+            showToast("Admin logged out.");
+          }}
+        />
+      )}
+
       {page === "owner" && user?.role !== "owner" && (
         <AuthPage
           defaultRole="owner"
-          hideGuest
+          lockRole
+          onBack={() => setPage("home")}
+          onSuccess={handleAuthSuccess}
+        />
+      )}
+
+      {page === "admin" && user?.role !== "admin" && (
+        <AuthPage
+          defaultRole="admin"
+          lockRole
           onBack={() => setPage("home")}
           onSuccess={handleAuthSuccess}
         />

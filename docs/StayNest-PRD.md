@@ -12,19 +12,19 @@ Owner: StayNest Product Team
 - Business model: Free launch, later monetization via premium owner features
 
 ## 2. Product Goals
-- Make hostel discovery and onboarding fast for students.
+- Make hostel discovery and onboarding fast for guests.
 - Give owners operational control (occupancy, fees, food, leaves, expenses).
 - Create a portable tenant trust profile across hostels.
 - Build transparent dispute workflows with admin oversight.
 
 ## 3. User Personas
 - Hostel Owner: Lists and operates one or multiple hostels.
-- Student/Hosteler: Searches, books, pays fees, manages food/leave.
+- Guest/Hosteler: Searches, books, pays fees, manages food/leave.
 - Admin: Verifies users/listings, moderates disputes/reviews, governs trust flags.
 
 ## 4. Scope
 ### 4.1 MVP (Phase 1)
-- OTP login for owner and student
+- OTP login for owner and guest
 - Owner listing + admin approval flow
 - Hostel discovery and booking request flow
 - Room inventory basics
@@ -64,7 +64,7 @@ Owner: StayNest Product Team
 ### Hostel Profile
 - FR-OWN-HOSTEL-01: Maintain hostel identity, address, area, city, pincode.
 - FR-OWN-HOSTEL-02: Store map pin and nearby landmarks.
-- FR-OWN-HOSTEL-03: Configure hostel type (Boys/Girls/Co-ed).
+- FR-OWN-HOSTEL-03: Configure hostel type (Boys/Girls/Co-Live).
 - FR-OWN-HOSTEL-04: Require minimum 5 photos.
 - FR-OWN-HOSTEL-05: Set rules, description, and public contact number.
 
@@ -239,10 +239,10 @@ Owner: StayNest Product Team
 - hostels(id, owner_id, name, address, area, city, pincode, gender_type, description, rules, contact_number, geo)
 - hostel_photos(id, hostel_id, url, display_order)
 - rooms(id, hostel_id, type, monthly_rent, total_beds, occupied_beds, is_maintenance)
-- bookings(id, hostel_id, student_id, room_id, status, move_in_date, move_out_date)
+- bookings(id, hostel_id, student_id, room_id, status, deposit_amount, move_in_date, move_out_date)
 - fee_ledger(id, hostel_id, student_id, month, amount_due, amount_paid, due_date, late_fee, status)
-- fee_payments(id, fee_ledger_id, amount, mode, paid_at, receipt_url)
-- menus(id, hostel_id, date, breakfast, lunch, dinner)
+- fee_payments(id, fee_ledger_id, amount, mode, paid_at, receipt_url, razorpay_ref)
+- menus(id, hostel_id, date, breakfast, lunch, dinner, is_override)
 - meal_opt_outs(id, hostel_id, student_id, meal_type, date, status)
 - leaves(id, hostel_id, student_id, start_date, end_date, reason, status)
 - expenses(id, hostel_id, category, amount, expense_date, notes)

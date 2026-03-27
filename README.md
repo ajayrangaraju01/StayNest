@@ -1,107 +1,107 @@
-# StayNest Frontend (React + Vite)
+# StayNest
 
-This is the StayNest frontend app.
+StayNest is a hostel and PG management platform with:
+- React + Vite frontend in `src/`
+- Django + DRF backend in `backend/`
+- JWT auth with email OTP flows
+- role-based dashboards for guests, owners, and admins
 
-## Local Run
+## Local Setup
+
+Frontend:
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Production Build
-
-```bash
-npm run build
-npm run preview
-```
-
-## Frontend Deployment (Recommended: Vercel)
-
-1. Push this repo to GitHub.
-2. Go to Vercel and import the repo.
-3. Build settings:
-   - Framework: `Vite`
-   - Build command: `npm run build`
-   - Output directory: `dist`
-4. Add environment variables (when backend is ready), for example:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_API_BASE_URL` (if using a separate backend)
-5. Deploy.
-
-Every push to `main` will auto-deploy.
-
-Alternatives: Netlify or Render static site deployment.
-
-## Backend (Django + DRF)
-
-The backend lives in `backend/` and uses JWT auth.
-
-### Starter Schema
-
-- `users(id, name, email, role, phone)`
-- `hostels(id, owner_id, name, location, address, gender, description, verified)`
-- `rooms(id, hostel_id, type, price, total_beds, available_beds)`
-- `menu(id, hostel_id, date, breakfast, lunch, dinner)`
-- `amenities(id, hostel_id, name)`
-- `hostel_photos(id, hostel_id, url, display_order)`
-- `bookings(id, student_id, room_id, status, move_in_date)`
-- `enquiries(id, student_id, hostel_id, message, status)`
-
-## Images
-
-- Supabase Storage for quick setup, or
-- Cloudinary if you want automatic optimization/resizing.
-
-## Payments
-
-For India launch flows: Razorpay is a practical default.
-
-## Launch Path
-
-1. Create Supabase project.
-2. Add tables and policies.
-3. Integrate Supabase Auth (owner/student roles).
-4. Replace mock data in [`src/data/hostels.js`](/c:/Users/Ajay/Desktop/StayNest/src/data/hostels.js) with live queries.
-5. Deploy frontend on Vercel.
-
-## Product Document
-
-Detailed PRD is available at [`docs/StayNest-PRD.md`](/c:/Users/Ajay/Desktop/StayNest/docs/StayNest-PRD.md).
-
-## Backend (Django + DRF)
-
-The backend now lives in `backend/`.
-
-### Setup (Local)
+Backend:
 
 ```bash
 python -m pip install -r backend/requirements.txt
+set DJANGO_DEBUG=true
 python backend/manage.py migrate
 python backend/manage.py runserver
 ```
 
-### API
+Frontend default URL:
+- `http://127.0.0.1:5173`
 
-- Health check: `GET /api/health/`
-- Hostels: `GET/POST /api/hostels/`
-- Rooms: `GET/POST /api/rooms/`
-- Bookings: `GET/POST /api/bookings/`
-- Users: `GET/POST /api/users/`
-- Auth register: `POST /api/auth/register/`
-- Auth login: `POST /api/auth/login/`
-- Auth refresh: `POST /api/auth/refresh/`
-- Auth me: `GET /api/auth/me/`
+Backend default URL:
+- `http://127.0.0.1:8000`
 
-### Deployment (Cheap + Best Default)
+## Production Build
 
-Backend: Render (free/low-cost) + Postgres  
-Frontend: Vercel (free)
+Frontend:
 
-Required backend env vars:
+```bash
+npm run build
+```
+
+Backend:
+
+```bash
+python backend/manage.py migrate
+python backend/manage.py ensure_admin
+```
+
+## Required Backend Env Vars
+
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG=false`
-- `DJANGO_ALLOWED_HOSTS=<your-backend-domain>`
-- `CORS_ALLOWED_ORIGINS=<your-frontend-domain>`
-- `DATABASE_URL=<render-postgres-url>`
+- `DATABASE_URL`
+- `DJANGO_ALLOWED_HOSTS`
+- `CORS_ALLOWED_ORIGINS`
+- `CSRF_TRUSTED_ORIGINS`
+
+For email OTP:
+- `DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend`
+- `DJANGO_DEFAULT_FROM_EMAIL`
+- `EMAIL_HOST`
+- `EMAIL_PORT`
+- `EMAIL_HOST_USER`
+- `EMAIL_HOST_PASSWORD`
+- `EMAIL_USE_TLS=true`
+
+For admin bootstrap:
+- `ADMIN_PHONE`
+- `ADMIN_PASSWORD`
+- Optional: `ADMIN_EMAIL`, `ADMIN_NAME`
+
+## Main API Areas
+
+- `GET /api/health/`
+- `POST /api/auth/send-registration-otp/`
+- `POST /api/auth/send-login-otp/`
+- `POST /api/auth/register/`
+- `POST /api/auth/login-otp/`
+- `GET /api/auth/me/`
+- `GET /api/student/overview/`
+- `GET /api/owner/students/`
+- `GET/POST /api/hostels/`
+- `GET/POST /api/rooms/`
+- `GET/POST /api/bookings/`
+- `GET/POST /api/fee-ledgers/`
+- `GET/POST /api/fee-payments/`
+- `GET/POST /api/menus/`
+- `GET/POST /api/leaves/`
+- `GET/POST /api/complaints/`
+- `GET/POST /api/reviews/`
+- `GET /api/trust/summary/`
+
+## Deployment
+
+Recommended default:
+- Frontend: Vercel
+- Backend: Render
+- Database: Postgres
+
+Notes:
+- keep `.env` secrets only in your hosting platform
+- do not deploy with SQLite
+- do not deploy with `DJANGO_DEBUG=true`
+- rotate exposed SMTP app passwords before production
+
+## Product Reference
+
+The current PRD lives in [docs/StayNest-PRD.md](/c:/Users/Ajay/Desktop/StayNest/docs/StayNest-PRD.md).

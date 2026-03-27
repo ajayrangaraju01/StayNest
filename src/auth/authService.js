@@ -1,4 +1,11 @@
-import { authLogin, authMe, authRegister } from "../api/staynestApi";
+import {
+  authLogin,
+  authLoginOtp,
+  authMe,
+  authRegister,
+  authSendLoginOtp,
+  authSendRegistrationOtp,
+} from "../api/staynestApi";
 
 const SESSION_KEY = "staynest_session";
 const ACCESS_KEY = "staynest_access_token";
@@ -38,8 +45,10 @@ function toSession(user) {
     id: user.id,
     name: user.name,
     phone: user.phone,
+    email: user.email,
     role: user.role === "student" ? "guest" : user.role,
     status: user.status,
+    verificationState: user.verification_state,
   };
 }
 
@@ -57,10 +66,45 @@ function clearTokens() {
   localStorage.removeItem(REFRESH_KEY);
 }
 
-export async function signUp({ name, phone, password, role, hostel }) {
+export async function sendRegistrationOtp(email) {
+  const normalizedEmail = `${email || ""}`.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+
+  try {
+    await authSendRegistrationOtp({ email: normalizedEmail });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to send email OTP." };
+  }
+}
+
+export async function sendLoginOtp(email, role) {
+  const normalizedEmail = `${email || ""}`.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+
+  try {
+    await authSendLoginOtp({ email: normalizedEmail, role: role === "guest" ? "student" : role });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to send login OTP." };
+  }
+}
+
+export async function signUp({ name, phone, email, otpCode, password, role, hostel }) {
   const normalizedPhone = normalizePhone(phone);
+  const normalizedEmail = `${email || ""}`.trim().toLowerCase();
   if (!normalizedPhone) {
     return { ok: false, error: "Enter a valid mobile number." };
+  }
+  if (!normalizedEmail) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+  if (!otpCode || `${otpCode}`.trim().length !== 6) {
+    return { ok: false, error: "Enter the 6-digit email OTP." };
   }
   if (!password || password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
@@ -70,10 +114,10 @@ export async function signUp({ name, phone, password, role, hostel }) {
     const apiRole = role === "guest" ? "student" : role;
     const payload = {
       phone: normalizedPhone,
+      email: normalizedEmail,
       name: name.trim(),
       role: apiRole,
-      status: apiRole === "owner" ? "pending" : "active",
-      verification_state: apiRole === "owner" ? "pending" : "unverified",
+      otp_code: `${otpCode}`.trim(),
       password,
     };
     if (hostel && apiRole === "owner") {
@@ -82,7 +126,7 @@ export async function signUp({ name, phone, password, role, hostel }) {
     const user = await authRegister(payload);
     const tokens = await authLogin({ phone: normalizedPhone, password });
     saveTokens(tokens);
-    const session = toSession(user);
+    const session = toSession(await authMe());
     saveSession(session);
     return { ok: true, session };
   } catch (error) {
@@ -90,20 +134,21 @@ export async function signUp({ name, phone, password, role, hostel }) {
   }
 }
 
-export async function signIn({ phone, password, role }) {
-  const normalizedPhone = normalizePhone(phone);
-  if (!normalizedPhone) {
-    return { ok: false, error: "Enter a valid mobile number." };
+export async function signIn({ email, otpCode, role }) {
+  const normalizedEmail = `${email || ""}`.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { ok: false, error: "Enter a valid email address." };
   }
-  if (!password) {
-    return { ok: false, error: "Enter your password." };
+  if (!otpCode || `${otpCode}`.trim().length !== 6) {
+    return { ok: false, error: "Enter the 6-digit email OTP." };
   }
 
   try {
-    const tokens = await authLogin({ phone: normalizedPhone, password });
+    const apiRole = role === "guest" ? "student" : role;
+    const tokens = await authLoginOtp({ email: normalizedEmail, otp_code: `${otpCode}`.trim(), role: apiRole });
     saveTokens(tokens);
     const user = await authMe();
-    if (role && user.role !== (role === "guest" ? "student" : role)) {
+    if (role && user.role !== apiRole) {
       return { ok: false, error: `This account is registered as ${user.role}.` };
     }
     if (user.status === "suspended") {

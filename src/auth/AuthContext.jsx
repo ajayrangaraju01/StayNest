@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { getSession, signIn, signOut, signUp } from "./authService";
+import { getSession, sendLoginOtp, sendRegistrationOtp, signIn, signOut, signUp } from "./authService";
 import AuthContext from "./context";
 
 export function AuthProvider({ children }) {
@@ -19,6 +19,8 @@ export function AuthProvider({ children }) {
         if (result.ok) setUser(result.session);
         return result;
       },
+      sendLoginOtp,
+      sendRegistrationOtp,
       logout: () => {
         signOut();
         setUser(null);

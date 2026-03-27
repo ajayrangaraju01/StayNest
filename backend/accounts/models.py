@@ -45,6 +45,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         REJECTED = "rejected", "Rejected"
 
     phone = models.CharField(max_length=20, unique=True)
+    email = models.EmailField(unique=True, null=True, blank=True)
     name = models.CharField(max_length=120)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STUDENT)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
@@ -55,6 +56,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
     trust_score = models.PositiveSmallIntegerField(default=60)
     phone_verified = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
@@ -94,3 +96,22 @@ class OwnerProfile(models.Model):
 
     def __str__(self):
         return f"OwnerProfile({self.user_id})"
+
+
+class EmailOTP(models.Model):
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=40, default="register")
+    is_used = models.BooleanField(default=False)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["email", "purpose", "expires_at"]),
+        ]
+
+    def __str__(self):
+        return f"EmailOTP({self.email}, {self.purpose})"

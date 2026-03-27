@@ -7,7 +7,7 @@ export default function HostelDetail({
   user,
   onBack,
   onToast,
-  onRequireGuestLogin,
+  onRequireStudentLogin,
   onBookingRequest,
 }) {
   const [activeImg, setActiveImg] = useState(0);
@@ -18,7 +18,21 @@ export default function HostelDetail({
   const [message, setMessage] = useState("");
 
   const selectedRoomData = hostel.rooms.find((room) => room.type === selectedRoom);
-  const securityDeposit = selectedRoomData ? selectedRoomData.price * 2 : 0;
+  const bookingAdvance = selectedRoomData ? Number(selectedRoomData.bookingAdvance || 0) : 0;
+  const securityDeposit = selectedRoomData ? Number(selectedRoomData.securityDeposit || 0) : 0;
+  const totalOpenBeds = hostel.rooms.reduce((sum, room) => sum + Number(room.available || 0), 0);
+  const lowestMoveIn = hostel.rooms.length
+    ? Math.min(
+      ...hostel.rooms.map((room) =>
+        Number(room.price || 0) + Number(room.bookingAdvance || 0) + Number(room.securityDeposit || 0) + 500,
+      ),
+    )
+    : 0;
+  const quickSignals = [
+    `${totalOpenBeds} beds open`,
+    hostel.verified ? "Owner verified" : "Approval pending",
+    `${hostel.rooms.length} share options`,
+  ];
 
   const handleRequestBooking = () => {
     if (!selectedRoomData) {
@@ -32,7 +46,7 @@ export default function HostelDetail({
     }
 
     if (!user || user.role !== "guest") {
-      onRequireGuestLogin();
+      onRequireStudentLogin();
       return;
     }
 
@@ -97,6 +111,12 @@ export default function HostelDetail({
             </div>
 
             <p className="detail-desc">{hostel.description}</p>
+
+            <div className="card-signal-row" style={{ marginBottom: 24 }}>
+              {quickSignals.map((signal) => (
+                <span key={signal} className="card-signal">{signal}</span>
+              ))}
+            </div>
 
             <div className="rooms-title">Amenities</div>
             <div className="amenity-grid">
@@ -176,7 +196,21 @@ export default function HostelDetail({
           <div>
             <div className="booking-sidebar">
               <div className="booking-title">Request to Join</div>
-              <div className="booking-sub">Select room type and move-in date</div>
+              <div className="booking-sub">Select room type and move-in date to see the owner-set fee breakup</div>
+              <div className="booking-trust-box">
+                <div className="booking-trust-item">
+                  <span>Hostel Status</span>
+                  <strong>{hostel.verified ? "Verified & Live" : "Awaiting approval"}</strong>
+                </div>
+                <div className="booking-trust-item">
+                  <span>Beds Open</span>
+                  <strong>{totalOpenBeds}</strong>
+                </div>
+                <div className="booking-trust-item">
+                  <span>Lowest Move-in</span>
+                  <strong>INR {lowestMoveIn.toLocaleString()}</strong>
+                </div>
+              </div>
 
               <select
                 className="booking-select"
@@ -231,7 +265,15 @@ export default function HostelDetail({
                     </strong>
                   </div>
                   <div className="booking-price-row">
-                    <span>Security Deposit (2 months)</span>
+                    <span>Booking Advance</span>
+                    <strong>
+                      INR
+                      {" "}
+                      {bookingAdvance.toLocaleString()}
+                    </strong>
+                  </div>
+                  <div className="booking-price-row">
+                    <span>Security Deposit</span>
                     <strong>
                       INR
                       {" "}
@@ -248,7 +290,7 @@ export default function HostelDetail({
                     <span>
                       INR
                       {" "}
-                      {(securityDeposit + selectedRoomData.price + 500).toLocaleString()}
+                      {(bookingAdvance + securityDeposit + selectedRoomData.price + 500).toLocaleString()}
                     </span>
                   </div>
                 </>

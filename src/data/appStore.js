@@ -9,9 +9,6 @@ import {
   updateBooking,
   updateRoom,
 } from "../api/staynestApi";
-import { HOSTELS } from "./hostels";
-
-const FALLBACK_BY_NAME = new Map(HOSTELS.map((hostel) => [hostel.name, hostel]));
 
 const DEFAULT_MENU = {
   breakfast: "Menu will be updated by owner.",
@@ -19,11 +16,7 @@ const DEFAULT_MENU = {
   dinner: "Menu will be updated by owner.",
 };
 
-const DEFAULT_IMAGES = [
-  "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&q=80",
-  "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&q=80",
-  "https://images.unsplash.com/photo-1585412727339-54e4bae3bbf9?w=800&q=80",
-];
+const DEFAULT_IMAGES = ["https://placehold.co/1200x800?text=StayNest"];
 
 const ROOM_TYPE_TO_UI = {
   single: "Single",
@@ -46,8 +39,8 @@ const ROOM_TYPE_TO_API = {
 function mapGenderToUi(genderType) {
   if (genderType === "boys") return "Boys";
   if (genderType === "girls") return "Girls";
-  if (genderType === "coed") return "Co-ed";
-  return "Co-ed";
+  if (genderType === "coed") return "Co-Live";
+  return "Co-Live";
 }
 
 function mapGenderToApi(gender) {
@@ -59,30 +52,32 @@ function mapGenderToApi(gender) {
 function mapRoomsForUi(rooms) {
   return rooms.map((room) => ({
     id: room.id,
+    roomNumber: room.room_number || "",
     type: ROOM_TYPE_TO_UI[room.type] || room.type,
     price: Number(room.monthly_rent || 0),
+    bookingAdvance: Number(room.booking_advance || 0),
+    securityDeposit: Number(room.security_deposit || 0),
     total: room.total_beds,
     available: Math.max(0, room.total_beds - room.occupied_beds),
   }));
 }
 
 function mapHostelForUi(hostel, rooms) {
-  const fallback = FALLBACK_BY_NAME.get(hostel.name);
   const photos = hostel.photos?.length
     ? hostel.photos.map((photo) => photo.url)
-    : fallback?.images || DEFAULT_IMAGES;
+    : DEFAULT_IMAGES;
   const amenities = hostel.amenities?.length
     ? hostel.amenities
-    : fallback?.amenities || ["WiFi", "CCTV", "Power Backup"];
-  const menu = fallback?.menu || DEFAULT_MENU;
-  const rating = fallback?.rating ?? 4.2;
-  const reviews = fallback?.reviews ?? 0;
-  const distance = fallback?.distance || "Distance not set";
+    : ["WiFi", "CCTV", "Power Backup"];
+  const menu = DEFAULT_MENU;
+  const rating = 0;
+  const reviews = 0;
+  const distance = hostel.city ? `${hostel.city} listing` : "Location available";
 
   return {
     id: hostel.id,
     ownerId: hostel.owner,
-    owner: fallback?.owner || "Owner",
+    owner: "Owner",
     name: hostel.name,
     location: hostel.area,
     city: hostel.city,
@@ -150,8 +145,11 @@ export async function addHostelListing({ ownerId, ownerName, hostel }) {
   const roomCreates = hostel.rooms.map((room) =>
     createRoom({
       hostel: created.id,
+      room_number: room.roomNumber || "",
       type: ROOM_TYPE_TO_API[room.type] || "single",
       monthly_rent: room.price,
+      booking_advance: room.bookingAdvance || 0,
+      security_deposit: room.securityDeposit || 0,
       total_beds: room.total,
       occupied_beds: Math.max(0, room.total - room.available),
       is_maintenance: false,
@@ -202,7 +200,7 @@ export async function getOwnerBookingRequests(ownerId, hostels = []) {
     return acc;
   }, {});
   return bookings
-    .filter((booking) => ownerHostelIds.has(booking.hostel))
+    .filter((booking) => ownerHostelIds.has(booking.hostel) && booking.status === "requested")
     .map((booking) => ({
       id: booking.id,
       hostelId: booking.hostel,
@@ -210,7 +208,7 @@ export async function getOwnerBookingRequests(ownerId, hostels = []) {
       studentId: booking.student,
       studentName: "Student",
       studentPhone: booking.student_phone || "",
-      roomType: booking.room ? roomTypeById[booking.room] || "Room" : "Room",
+      roomType: booking.room ? `${booking.room_number ? `${booking.room_number} - ` : ""}${roomTypeById[booking.room] || "Room"}` : "Room",
       moveInDate: booking.move_in_date,
       message: booking.message || "",
       status: mapBookingStatusToUi(booking.status),
@@ -233,7 +231,7 @@ export async function getStudentBookingRequests(studentId, hostels = []) {
       hostelName: hostels.find((hostel) => hostel.id === booking.hostel)?.name || "Hostel",
       studentId: booking.student,
       studentName: "Student",
-      roomType: booking.room ? roomTypeById[booking.room] || "Room" : "Room",
+      roomType: booking.room ? `${booking.room_number ? `${booking.room_number} - ` : ""}${roomTypeById[booking.room] || "Room"}` : "Room",
       moveInDate: booking.move_in_date,
       message: booking.message || "",
       status: mapBookingStatusToUi(booking.status),
@@ -306,4 +304,8 @@ export async function updateHostelDetails(hostelId, payload) {
 
 export async function updateRoomDetails(roomId, payload) {
   return updateRoom(roomId, payload);
+}
+
+export async function createRoomDetails(payload) {
+  return createRoom(payload);
 }

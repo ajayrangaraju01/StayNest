@@ -1,6 +1,19 @@
 from rest_framework import serializers
 
-from .models import Booking, Hostel, HostelPhoto, Notification, Room
+from .models import (
+    Booking,
+    Complaint,
+    ComplaintEvidence,
+    FeeLedger,
+    FeePayment,
+    Hostel,
+    HostelPhoto,
+    Leave,
+    Menu,
+    Notification,
+    Review,
+    Room,
+)
 
 
 class HostelPhotoSerializer(serializers.ModelSerializer):
@@ -57,14 +70,33 @@ class HostelSerializer(serializers.ModelSerializer):
         return instance
 
 
+class AdminHostelSerializer(HostelSerializer):
+    owner_name = serializers.CharField(source="owner.name", read_only=True)
+    owner_phone = serializers.CharField(source="owner.phone", read_only=True)
+    owner_status = serializers.CharField(source="owner.status", read_only=True)
+    owner_verification_state = serializers.CharField(source="owner.verification_state", read_only=True)
+
+    class Meta(HostelSerializer.Meta):
+        fields = HostelSerializer.Meta.fields + (
+            "owner_name",
+            "owner_phone",
+            "owner_status",
+            "owner_verification_state",
+            "created_at",
+        )
+
+
 class RoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room
         fields = (
             "id",
             "hostel",
+            "room_number",
             "type",
             "monthly_rent",
+            "booking_advance",
+            "security_deposit",
             "total_beds",
             "occupied_beds",
             "is_maintenance",
@@ -72,6 +104,11 @@ class RoomSerializer(serializers.ModelSerializer):
 
 
 class BookingSerializer(serializers.ModelSerializer):
+    room_number = serializers.SerializerMethodField()
+
+    def get_room_number(self, obj):
+        return obj.assigned_room_number or (obj.room.room_number if obj.room else "")
+
     class Meta:
         model = Booking
         fields = (
@@ -79,6 +116,8 @@ class BookingSerializer(serializers.ModelSerializer):
             "hostel",
             "student",
             "room",
+            "assigned_room_number",
+            "room_number",
             "status",
             "message",
             "student_phone",
@@ -115,3 +154,174 @@ class NotificationSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = ("created_at",)
+
+
+class FeePaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FeePayment
+        fields = (
+            "id",
+            "ledger",
+            "amount",
+            "mode",
+            "paid_at",
+            "receipt_url",
+            "reference_id",
+            "razorpay_ref",
+        )
+        read_only_fields = ("paid_at",)
+
+
+class FeeLedgerSerializer(serializers.ModelSerializer):
+    payments = FeePaymentSerializer(many=True, read_only=True)
+    hostel_name = serializers.CharField(source="hostel.name", read_only=True)
+    student_name = serializers.CharField(source="student.name", read_only=True)
+    student_phone = serializers.CharField(source="student.phone", read_only=True)
+
+    class Meta:
+        model = FeeLedger
+        fields = (
+            "id",
+            "hostel",
+            "hostel_name",
+            "student",
+            "student_name",
+            "student_phone",
+            "month",
+            "amount_due",
+            "amount_paid",
+            "due_date",
+            "late_fee",
+            "status",
+            "created_at",
+            "payments",
+        )
+        read_only_fields = ("created_at",)
+
+
+class MenuSerializer(serializers.ModelSerializer):
+    hostel_name = serializers.CharField(source="hostel.name", read_only=True)
+
+    class Meta:
+        model = Menu
+        fields = (
+            "id",
+            "hostel",
+            "hostel_name",
+            "date",
+            "breakfast",
+            "lunch",
+            "dinner",
+            "is_override",
+        )
+
+
+class LeaveSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source="student.name", read_only=True)
+    hostel_name = serializers.CharField(source="hostel.name", read_only=True)
+
+    class Meta:
+        model = Leave
+        fields = (
+            "id",
+            "hostel",
+            "hostel_name",
+            "student",
+            "student_name",
+            "start_date",
+            "end_date",
+            "reason",
+            "status",
+        )
+
+
+class ComplaintEvidenceSerializer(serializers.ModelSerializer):
+    submitted_by_name = serializers.CharField(source="submitted_by.name", read_only=True)
+
+    class Meta:
+        model = ComplaintEvidence
+        fields = (
+            "id",
+            "file_url",
+            "submitted_by",
+            "submitted_by_name",
+            "created_at",
+        )
+        read_only_fields = ("submitted_by", "created_at")
+
+
+class ComplaintSerializer(serializers.ModelSerializer):
+    evidence = ComplaintEvidenceSerializer(many=True, read_only=True)
+    hostel_name = serializers.CharField(source="hostel.name", read_only=True)
+    owner_name = serializers.CharField(source="owner.name", read_only=True)
+    student_name = serializers.CharField(source="student.name", read_only=True)
+    student_phone = serializers.CharField(source="student.phone", read_only=True)
+
+    class Meta:
+        model = Complaint
+        fields = (
+            "id",
+            "hostel",
+            "hostel_name",
+            "owner",
+            "owner_name",
+            "student",
+            "student_name",
+            "student_phone",
+            "reason",
+            "status",
+            "admin_decision",
+            "created_at",
+            "updated_at",
+            "evidence",
+        )
+        read_only_fields = (
+            "owner",
+            "status",
+            "admin_decision",
+            "created_at",
+            "updated_at",
+        )
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    hostel_name = serializers.CharField(source="hostel.name", read_only=True)
+    student_name = serializers.CharField(source="student.name", read_only=True)
+    average_rating = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Review
+        fields = (
+            "id",
+            "hostel",
+            "hostel_name",
+            "student",
+            "student_name",
+            "rating_cleanliness",
+            "rating_food",
+            "rating_owner",
+            "rating_facilities",
+            "rating_value",
+            "average_rating",
+            "text",
+            "owner_reply",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "student",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_average_rating(self, obj):
+        ratings = [
+            obj.rating_cleanliness,
+            obj.rating_food,
+            obj.rating_owner,
+            obj.rating_facilities,
+            obj.rating_value,
+        ]
+        return round(sum(ratings) / len(ratings), 1)

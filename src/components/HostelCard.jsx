@@ -1,7 +1,15 @@
 import Stars from "./Stars";
 
 export default function HostelCard({ hostel, onClick }) {
-  const minPrice = Math.min(...hostel.rooms.map((room) => room.price));
+  const pricedRooms = hostel.rooms.filter((room) => Number(room.price || 0) > 0);
+  const minPrice = pricedRooms.length ? Math.min(...pricedRooms.map((room) => room.price)) : 0;
+  const totalAvailableBeds = hostel.rooms.reduce((sum, room) => sum + Number(room.available || 0), 0);
+  const totalBeds = hostel.rooms.reduce((sum, room) => sum + Number(room.total || 0), 0);
+  const bestRoom = hostel.rooms.find((room) => room.available > 0) || hostel.rooms[0] || null;
+  const moveInPreview = bestRoom
+    ? Number(bestRoom.price || 0) + Number(bestRoom.bookingAdvance || 0) + Number(bestRoom.securityDeposit || 0) + 500
+    : 0;
+  const highlightAmenities = (hostel.amenities || []).slice(0, 3);
 
   return (
     <div className="hostel-card" onClick={onClick}>
@@ -20,6 +28,11 @@ export default function HostelCard({ hostel, onClick }) {
         </div>
         <div className="card-name">{hostel.name}</div>
         <div className="card-distance">{hostel.distance}</div>
+        <div className="card-signal-row">
+          <span className="card-signal">{totalAvailableBeds} beds open</span>
+          <span className="card-signal">{totalBeds} total beds</span>
+          <span className="card-signal">{bestRoom?.type || "Room info soon"}</span>
+        </div>
         <div className="card-rating">
           <Stars rating={hostel.rating} />
           <span className="rating-num">{hostel.rating}</span>
@@ -39,6 +52,11 @@ export default function HostelCard({ hostel, onClick }) {
             </span>
           ))}
         </div>
+        <div className="card-amenities">
+          {highlightAmenities.map((amenity) => (
+            <span key={amenity} className="card-amenity-pill">{amenity}</span>
+          ))}
+        </div>
         <div className="card-footer">
           <div className="card-price">
             Starting from
@@ -48,6 +66,7 @@ export default function HostelCard({ hostel, onClick }) {
               {minPrice.toLocaleString()}
             </strong>
             /month
+            <span className="card-price-sub">Move-in from INR {moveInPreview.toLocaleString()}</span>
           </div>
           <button
             className="card-cta"

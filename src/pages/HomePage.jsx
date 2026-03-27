@@ -12,6 +12,17 @@ export default function HomePage({
   const [searchQuery, setSearchQuery] = useState("");
   const [genderFilter, setGenderFilter] = useState("All");
   const [locationFilter, setLocationFilter] = useState("All Locations");
+  const verifiedCount = hostels.filter((hostel) => hostel.verified).length;
+  const liveLocations = new Set(hostels.map((hostel) => hostel.location).filter(Boolean)).size;
+  const activeBeds = hostels.reduce(
+    (sum, hostel) => sum + hostel.rooms.reduce((roomSum, room) => roomSum + Number(room.available || 0), 0),
+    0,
+  );
+  const affordableStart = hostels.length
+    ? Math.min(
+      ...hostels.flatMap((hostel) => hostel.rooms.map((room) => Number(room.price || 0)).filter((price) => price > 0)),
+    )
+    : 0;
 
   const filteredHostels = hostels.filter((hostel) => {
     const normalizedQuery = searchQuery.toLowerCase();
@@ -22,7 +33,7 @@ export default function HomePage({
       hostel.name.toLowerCase().includes(normalizedQuery);
 
     const matchesGender =
-      genderFilter === "All" || hostel.gender === genderFilter || hostel.gender === "Co-ed";
+      genderFilter === "All" || hostel.gender === genderFilter || hostel.gender === "Co-Live";
     const matchesLocation = locationFilter === "All Locations" || hostel.location === locationFilter;
 
     return matchesSearch && matchesGender && matchesLocation;
@@ -41,6 +52,15 @@ export default function HomePage({
           Discover verified hostels near your college or workplace. Compare rooms, menus and prices
           in one place.
         </p>
+        <div className="hero-workflow-strip">
+          {[
+            "Search verified hostels",
+            "Compare fee breakup and amenities",
+            "Send request and track approval",
+          ].map((item) => (
+            <span key={item} className="hero-workflow-pill">{item}</span>
+          ))}
+        </div>
         <div className="hero-search">
           <input
             placeholder="Search by location, area or hostel name..."
@@ -54,10 +74,10 @@ export default function HomePage({
         </div>
         <div className="hero-stats">
           {[
-            ["500+", "Verified Hostels"],
-            ["12K+", "Happy Students"],
-            ["48", "Locations"],
-            ["4.6", "Avg Rating"],
+            [`${verifiedCount}+`, "Verified Hostels"],
+            [`${activeBeds}+`, "Beds Open"],
+            [`${liveLocations}+`, "Locations"],
+            [affordableStart ? `INR ${affordableStart}` : "INR 0", "Starting Rent"],
           ].map(([number, label]) => (
             <div className="hero-stat" key={label}>
               <span className="hero-stat-num">{number}</span>
@@ -70,6 +90,25 @@ export default function HomePage({
       <div className="section">
         <div className="section-label">Browse Hostels</div>
         <h2 className="section-title">Hostels Near You</h2>
+        <div className="browse-summary-row">
+          <div className="browse-summary-card">
+            <strong>{filteredHostels.length}</strong>
+            <span>hostels match your search</span>
+          </div>
+          <div className="browse-summary-card">
+            <strong>{filteredHostels.filter((hostel) => hostel.verified).length}</strong>
+            <span>verified options in this view</span>
+          </div>
+          <div className="browse-summary-card">
+            <strong>
+              {filteredHostels.reduce(
+                (sum, hostel) => sum + hostel.rooms.reduce((roomSum, room) => roomSum + Number(room.available || 0), 0),
+                0,
+              )}
+            </strong>
+            <span>beds currently open</span>
+          </div>
+        </div>
 
         <div className="filters">
           {LOCATIONS.map((location) => (
@@ -82,7 +121,7 @@ export default function HomePage({
             </button>
           ))}
           <div className="filter-gender">
-            {["All", "Boys", "Girls", "Co-ed"].map((gender) => (
+            {["All", "Boys", "Girls", "Co-Live"].map((gender) => (
               <button
                 key={gender}
                 className={`filter-chip${genderFilter === gender ? " active" : ""}`}
@@ -123,15 +162,15 @@ export default function HomePage({
             {[
               {
                 title: "Search by Location",
-                desc: "Search near college or office and explore verified hostels.",
+                desc: "Search near college or office and shortlist verified hostels with live bed availability.",
               },
               {
                 title: "Compare and Choose",
-                desc: "Compare room types, menus, amenities, and pricing.",
+                desc: "Compare room types, move-in cost, menu, amenities, and trust signals before you decide.",
               },
               {
                 title: "Request to Join",
-                desc: "Send a booking request and confirm your move-in date.",
+                desc: "Send a join request, track approval, and move in with complete fee clarity.",
               },
             ].map((item, index) => (
               <div className="how-card" key={item.title}>
@@ -153,7 +192,7 @@ export default function HomePage({
               List it on StayNest
             </div>
             <p className="cta-sub">
-              Reach students actively searching for accommodation and manage operations from one
+              Reach guests actively searching for accommodation and manage operations from one
               dashboard.
             </p>
           </div>
