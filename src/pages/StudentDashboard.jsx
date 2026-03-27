@@ -428,6 +428,19 @@ export default function StudentDashboard({ hostels, onHostelClick, requests = []
   return (
     <div className="section">
       <div className="section-title">My Hostel/PG</div>
+      <div className="mobile-quick-grid">
+        {[
+          { label: "Fee Due", value: upcomingFee ? `INR ${upcomingFee.amount_due}` : "None" },
+          { label: "Menu", value: todaysMenu ? "Today" : "Pending" },
+          { label: "Leaves", value: leaves.length },
+          { label: "Trust", value: trustSummary?.trust_score ?? overview?.user?.trust_score ?? 0 },
+        ].map((item) => (
+          <div key={item.label} className="mobile-quick-card static">
+            <span className="mobile-quick-label">{item.label}</span>
+            <strong className="mobile-quick-value">{item.value}</strong>
+          </div>
+        ))}
+      </div>
       <div className="card-signal-row" style={{ marginBottom: 16 }}>
         {joinedWorkflow.map((item) => (
           <span key={item} className="card-signal">{item}</span>

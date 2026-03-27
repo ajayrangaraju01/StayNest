@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth/useAuth";
 import Toast from "./components/Toast";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -7,6 +7,7 @@ import HostelDetail from "./pages/HostelDetail";
 import OwnerDashboard from "./pages/OwnerDashboard";
 import StudentDashboard from "./pages/StudentDashboard";
 import AuthPage from "./pages/AuthPage";
+import { fetchNotifications } from "./api/staynestApi";
 import {
   createBookingRequest,
   getHostels,
@@ -15,6 +16,22 @@ import {
   updateBookingRequestStatus,
 } from "./data/appStore";
 import "./styles/staynest.css";
+
+function formatNotificationTime(value) {
+  if (!value) return "";
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${day}-${month}-${year} ${hours}:${minutes}`;
+  } catch {
+    return value;
+  }
+}
 
 export default function App() {
   const { user, logout } = useAuth();
@@ -29,6 +46,12 @@ export default function App() {
   const [loadingHostels, setLoadingHostels] = useState(true);
   const [ownerRequests, setOwnerRequests] = useState([]);
   const [studentRequests, setStudentRequests] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [ownerInitialTab, setOwnerInitialTab] = useState("overview");
+  const [adminInitialTab, setAdminInitialTab] = useState("overview");
+  const [studentInitialTab, setStudentInitialTab] = useState("overview");
+  const bellRef = useRef(null);
 
   const refreshHostels = async () => {
     setLoadingHostels(true);
@@ -65,8 +88,30 @@ export default function App() {
     }
   };
 
+  const getNotificationSeenKey = () => {
+    if (!user?.id) return null;
+    return `staynest_notifications_seen_${user.id}`;
+  };
+
+  const refreshNotifications = async () => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+    try {
+      const data = await fetchNotifications();
+      setNotifications(data || []);
+    } catch {
+      setNotifications([]);
+    }
+  };
+
   useEffect(() => {
     refreshHostels();
+  }, [user]);
+
+  useEffect(() => {
+    refreshNotifications();
   }, [user]);
 
   useEffect(() => {
@@ -74,6 +119,17 @@ export default function App() {
       refreshHostels();
     }
   }, [page]);
+
+  useEffect(() => {
+    if (!showNotifications) return undefined;
+    const handleClickOutside = (event) => {
+      if (!bellRef.current?.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showNotifications]);
 
   useEffect(() => {
     refreshRequests();
@@ -104,9 +160,32 @@ export default function App() {
     localStorage.setItem("staynest_last_page", page);
   }, [page]);
 
+  useEffect(() => {
+    if (!user) return;
+    const intervalId = window.setInterval(() => {
+      refreshNotifications();
+    }, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [user]);
+
   const openAuth = (role) => {
     setAuthRole(role);
     setPage("auth");
+  };
+
+  const seenKey = getNotificationSeenKey();
+  const lastSeenAt = seenKey ? localStorage.getItem(seenKey) : null;
+  const unreadCount = notifications.filter((note) => {
+    if (!lastSeenAt) return true;
+    return new Date(note.created_at).getTime() > new Date(lastSeenAt).getTime();
+  }).length;
+
+  const handleNotificationToggle = () => {
+    const nextOpen = !showNotifications;
+    setShowNotifications(nextOpen);
+    if (nextOpen && seenKey) {
+      localStorage.setItem(seenKey, new Date().toISOString());
+    }
   };
 
   const handleAuthSuccess = (session) => {
@@ -164,6 +243,8 @@ export default function App() {
   };
 
   const handleOwnerRequestAction = async (requestId, status) => {
+    const confirmed = window.confirm(`Are you sure you want to mark this request as ${status}?`);
+    if (!confirmed) return;
     const result = await updateBookingRequestStatus({ requestId, status });
     if (!result.ok) {
       showToast(result.error);
@@ -178,8 +259,114 @@ export default function App() {
     ? hostels.filter((hostel) => hostel.ownerId === user.id)
     : [];
 
+  const mobileNavItems = useMemo(() => {
+    if (user?.role === "guest") {
+      return [
+        { id: "home", label: "Browse" },
+        { id: "student", label: "My Stay" },
+      ];
+    }
+    if (user?.role === "owner") {
+      return [
+        { id: "owner", label: "Overview" },
+        { id: "home", label: "Browse" },
+      ];
+    }
+    if (user?.role === "admin") {
+      return [
+        { id: "admin", label: "Admin" },
+        { id: "home", label: "Browse" },
+      ];
+    }
+    return [
+      { id: "home", label: "Home" },
+      { id: "auth-guest", label: "Guest" },
+      { id: "auth-owner", label: "Owner" },
+    ];
+  }, [user]);
+
+  const handleMobileNav = (itemId) => {
+    if (itemId === "auth-guest") {
+      openAuth("guest");
+      return;
+    }
+    if (itemId === "auth-owner") {
+      openAuth("owner");
+      return;
+    }
+    setPage(itemId);
+  };
+
+  const handleNotificationClick = (note) => {
+    setShowNotifications(false);
+    if (seenKey) {
+      localStorage.setItem(seenKey, new Date().toISOString());
+    }
+
+    if (user?.role === "owner") {
+      setPage("owner");
+      if (note.type === "booking_request") setOwnerInitialTab("enquiries");
+      else if (note.type === "leave_request") setOwnerInitialTab("leaves");
+      else if (note.type === "review_submitted") setOwnerInitialTab("reviews");
+      else setOwnerInitialTab("overview");
+      return;
+    }
+
+    if (user?.role === "guest") {
+      setPage("student");
+      if (note.type === "complaint_created" || note.type === "complaint_status") setStudentInitialTab("complaints");
+      else if (note.type === "booking_status" || note.type === "walkin_checkin") setStudentInitialTab("overview");
+      else setStudentInitialTab("overview");
+      return;
+    }
+
+    if (user?.role === "admin") {
+      setPage("admin");
+      if ((note.type || "").includes("complaint")) setAdminInitialTab("complaints");
+      else if ((note.type || "").includes("review")) setAdminInitialTab("reviews");
+      else setAdminInitialTab("overview");
+    }
+  };
+
   return (
-    <div className="app">
+    <div className={`app${mobileNavItems.length ? " app-mobile-shell" : ""}`}>
+      {user && (
+        <div className="notification-shell" ref={bellRef}>
+          <button className="notification-bell" onClick={handleNotificationToggle} aria-label="Open notifications">
+            <span className="notification-bell-icon">🔔</span>
+            {unreadCount > 0 && <span className="notification-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+          </button>
+          {showNotifications && (
+            <div className="notification-panel">
+              <div className="notification-panel-header">
+                <div>
+                  <strong>Updates</strong>
+                  <div className="notification-panel-subtitle">Requests, approvals, payments and other activity</div>
+                </div>
+                <button className="notification-refresh-btn" onClick={refreshNotifications}>Refresh</button>
+              </div>
+              <div className="notification-panel-list">
+                {notifications.length === 0 && (
+                  <div className="notification-empty">No updates yet.</div>
+                )}
+                {notifications.slice(0, 12).map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    className="notification-item notification-item-button"
+                    onClick={() => handleNotificationClick(note)}
+                  >
+                    <div className="notification-item-title">{note.title}</div>
+                    <div className="notification-item-body">{note.body}</div>
+                    <div className="notification-item-meta">{formatNotificationTime(note.created_at)}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {page !== "owner" && page !== "admin" && (
         <nav className="nav">
           <div className="nav-logo" onClick={() => setPage("home")}>
@@ -279,6 +466,7 @@ export default function App() {
 
       {page === "student" && user?.role === "guest" && (
         <StudentDashboard
+          initialTab={studentInitialTab}
           hostels={publicHostels}
           requests={studentRequests}
           onToast={showToast}
@@ -291,6 +479,7 @@ export default function App() {
 
       {page === "owner" && user?.role === "owner" && (
         <OwnerDashboard
+          initialTab={ownerInitialTab}
           ownerName={user.name}
           ownerPhone={user.phone}
           ownerRole={user.role}
@@ -311,6 +500,7 @@ export default function App() {
 
       {page === "admin" && user?.role === "admin" && (
         <AdminDashboard
+          initialTab={adminInitialTab}
           adminName={user.name}
           onToast={showToast}
           onLogout={() => {
@@ -349,6 +539,22 @@ export default function App() {
       )}
 
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
+
+      <div className="mobile-bottom-nav">
+        {mobileNavItems.map((item) => (
+          <button
+            key={item.id}
+            className={`mobile-bottom-nav-item${
+              (item.id === page || (item.id === "auth-guest" && page === "auth" && authRole === "guest") || (item.id === "auth-owner" && page === "auth" && authRole === "owner"))
+                ? " active"
+                : ""
+            }`}
+            onClick={() => handleMobileNav(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -6,8 +6,18 @@ export default function HostelCard({ hostel, onClick }) {
   const totalAvailableBeds = hostel.rooms.reduce((sum, room) => sum + Number(room.available || 0), 0);
   const totalBeds = hostel.rooms.reduce((sum, room) => sum + Number(room.total || 0), 0);
   const bestRoom = hostel.rooms.find((room) => room.available > 0) || hostel.rooms[0] || null;
-  const moveInPreview = bestRoom
-    ? Number(bestRoom.price || 0) + Number(bestRoom.bookingAdvance || 0) + Number(bestRoom.securityDeposit || 0) + 500
+  const moveInPreviewRooms = hostel.rooms.filter(
+    (room) => Number(room.available || 0) > 0 && Number(room.price || 0) > 0,
+  );
+  const moveInPreview = moveInPreviewRooms.length
+    ? Math.min(
+      ...moveInPreviewRooms.map((room) =>
+        Number(room.price || 0)
+        + Number(room.bookingAdvance || 0)
+        + Number(room.securityDeposit || 0)
+        + 500,
+      ),
+    )
     : 0;
   const highlightAmenities = (hostel.amenities || []).slice(0, 3);
 

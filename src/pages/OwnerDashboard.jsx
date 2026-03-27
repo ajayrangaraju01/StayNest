@@ -38,6 +38,7 @@ const sidebarItems = [
 ];
 
 export default function OwnerDashboard({
+  initialTab = "overview",
   ownerName = "Owner",
   ownerPhone = "",
   ownerRole = "owner",
@@ -74,7 +75,7 @@ export default function OwnerDashboard({
     { key: "five", label: "5 Share", beds: 5 },
     { key: "six", label: "6 Share", beds: 6 },
   ];
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [selectedHostelId, setSelectedHostelId] = useState(
     hostels[0]?.id || null,
   );
@@ -378,6 +379,34 @@ export default function OwnerDashboard({
     }
   };
 
+  const handleRemoveExistingPhoto = (photoToRemove) => {
+    if (!window.confirm("Remove this existing hostel photo?")) return;
+    setEditForm((prev) => {
+      if (!prev) return prev;
+      const nextExistingPhotos = (prev.existingPhotos || []).filter((photo) => photo !== photoToRemove);
+      const nextMergedLength = nextExistingPhotos.length + (prev.newPhotoFiles || []).length;
+      setPhotoIndex((current) => (nextMergedLength === 0 ? 0 : Math.min(current, nextMergedLength - 1)));
+      return {
+        ...prev,
+        existingPhotos: nextExistingPhotos,
+      };
+    });
+  };
+
+  const handleRemoveNewPhoto = (photoToRemove) => {
+    if (!window.confirm("Remove this selected photo?")) return;
+    setEditForm((prev) => {
+      if (!prev) return prev;
+      const nextNewPhotos = (prev.newPhotoFiles || []).filter((photo) => photo !== photoToRemove);
+      const nextMergedLength = (prev.existingPhotos || []).length + nextNewPhotos.length;
+      setPhotoIndex((current) => (nextMergedLength === 0 ? 0 : Math.min(current, nextMergedLength - 1)));
+      return {
+        ...prev,
+        newPhotoFiles: nextNewPhotos,
+      };
+    });
+  };
+
   const handleSaveEdits = async () => {
     if (!editForm) return;
     try {
@@ -549,6 +578,10 @@ export default function OwnerDashboard({
   }, [hostels, selectedHostelId]);
 
   useEffect(() => {
+    setActiveTab(initialTab || "overview");
+  }, [initialTab]);
+
+  useEffect(() => {
     const defaultHostelId = hostels[0]?.id ? String(hostels[0].id) : "";
     setFeeForm((prev) => ({ ...prev, hostelId: defaultHostelId }));
     setMenuForm((prev) => ({ ...prev, hostelId: defaultHostelId }));
@@ -700,6 +733,8 @@ export default function OwnerDashboard({
   };
 
   const handleGuestStatusChange = async (bookingId, nextStatus) => {
+    const actionLabel = nextStatus === "checked_in" ? "check in" : "check out";
+    if (!window.confirm(`Are you sure you want to ${actionLabel} this guest?`)) return;
     try {
       await updateBooking(bookingId, { status: nextStatus });
       const data = await fetchOwnerStudents();
@@ -791,6 +826,7 @@ export default function OwnerDashboard({
   };
 
   const handleLeaveStatus = async (leaveId, status) => {
+    if (!window.confirm(`Are you sure you want to mark this leave as ${status}?`)) return;
     try {
       await updateLeave(leaveId, { status });
       onToast(`Leave ${status}.`);
@@ -801,6 +837,7 @@ export default function OwnerDashboard({
   };
 
   const handleCreateComplaint = async () => {
+    if (!window.confirm("Are you sure you want to submit this complaint for admin review?")) return;
     try {
       await createComplaint({
         hostel: Number(complaintForm.hostelId),
@@ -828,6 +865,7 @@ export default function OwnerDashboard({
   };
 
   const handleAddWalkinStudent = async () => {
+    if (!window.confirm("Are you sure you want to add and check in this walk-in guest?")) return;
     try {
       await createWalkinStudent({
         name: walkinForm.name,
@@ -945,6 +983,17 @@ export default function OwnerDashboard({
 
         {activeTab === "overview" && (
           <>
+            <div className="mobile-quick-grid">
+              {[
+                { label: "Available Beds", value: stats.availableBeds },
+                { label: "Occupied Beds", value: Math.max(0, stats.totalBeds - stats.availableBeds) },
+              ].map((item) => (
+                <div key={item.label} className="mobile-quick-card static">
+                  <span className="mobile-quick-label">{item.label}</span>
+                  <strong className="mobile-quick-value">{item.value}</strong>
+                </div>
+              ))}
+            </div>
             <div className="form-section" style={{ marginBottom: 18 }}>
               <div className="form-section-title">Next Best Actions</div>
               <div className="workflow-grid">
@@ -1241,21 +1290,27 @@ export default function OwnerDashboard({
                   </div>
                   <div className="form-group full">
                     <label className="form-label">Hostel/PG Photos</label>
-                    <input
-                      className="form-input"
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleEditPhotoFiles}
-                    />
-                    <div style={{ fontSize: 12, marginTop: 6 }}>
-                      Existing photos:
-                      {" "}
-                      {editForm.existingPhotos?.length || 0}
-                      {" "}
-                      | New selected:
-                      {" "}
-                      {editForm.newPhotoFiles?.length || 0}
+                    <label className="photo-upload-shell">
+                      <input
+                        className="photo-upload-input"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleEditPhotoFiles}
+                      />
+                      <div className="photo-upload-copy">
+                        <div className="photo-upload-title">Add hostel photos</div>
+                        <div className="photo-upload-subtitle">
+                          Tap to choose multiple images for your listing gallery.
+                        </div>
+                      </div>
+                      <span className="photo-upload-cta">
+                        {editForm.newPhotoFiles?.length ? "Add More" : "Choose Photos"}
+                      </span>
+                    </label>
+                    <div className="photo-upload-stats">
+                      <span>Existing: {editForm.existingPhotos?.length || 0}</span>
+                      <span>New: {editForm.newPhotoFiles?.length || 0}</span>
                     </div>
                     {hasPhotos && (
                       <div
@@ -1310,27 +1365,54 @@ export default function OwnerDashboard({
                         </div>
                         <div style={{ display: "flex", gap: 6, padding: "8px 12px", flexWrap: "wrap" }}>
                           {mergedPhotosPreview.map((photo, index) => (
-                            <button
+                            <div
                               key={`${photo}-${index}`}
-                              type="button"
-                              onClick={() => setPhotoIndex(index)}
                               style={{
                                 width: 36,
                                 height: 36,
                                 borderRadius: 8,
                                 border: index === photoIndex ? "2px solid var(--terra)" : "1px solid var(--cream-dark)",
-                                padding: 0,
                                 overflow: "hidden",
                                 background: "white",
                                 cursor: "pointer",
+                                position: "relative",
                               }}
                             >
-                              <img
-                                src={photo}
-                                alt={`Thumb ${index + 1}`}
-                                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                              />
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => setPhotoIndex(index)}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  border: "none",
+                                  padding: 0,
+                                  background: "transparent",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <img
+                                  src={photo}
+                                  alt={`Thumb ${index + 1}`}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                className="photo-remove"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  const isExisting = index < (editForm.existingPhotos?.length || 0);
+                                  if (isExisting) {
+                                    handleRemoveExistingPhoto(photo);
+                                  } else {
+                                    handleRemoveNewPhoto(photo);
+                                  }
+                                }}
+                                aria-label={`Remove photo ${index + 1}`}
+                              >
+                                x
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -1807,11 +1889,6 @@ export default function OwnerDashboard({
                           {student.student_phone}
                         </div>
                         <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                          Hostel:
-                          {" "}
-                          {student.hostel_name}
-                        </div>
-                        <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
                           Room Type:
                           {" "}
                           {student.room_number ? `${student.room_number} - ` : ""}
@@ -1826,9 +1903,6 @@ export default function OwnerDashboard({
                           Joined:
                           {" "}
                           <strong>{student.move_in_date ? formatDisplayDate(student.move_in_date) : "Not set"}</strong>
-                        </div>
-                        <div style={{ fontSize: 12, marginTop: 6, color: "var(--warm-gray)" }}>
-                          Trust: <strong>{student.trust_score ?? 0}</strong> | Verification: <strong>{student.verification_state || "unverified"}</strong>
                         </div>
                       </div>
                       <div style={{ minWidth: 190, textAlign: "right" }}>
@@ -1887,11 +1961,6 @@ export default function OwnerDashboard({
                           Phone:
                           {" "}
                           {student.student_phone}
-                        </div>
-                        <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                          Hostel:
-                          {" "}
-                          {student.hostel_name}
                         </div>
                         <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
                           Last Room:

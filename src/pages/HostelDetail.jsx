@@ -21,9 +21,12 @@ export default function HostelDetail({
   const bookingAdvance = selectedRoomData ? Number(selectedRoomData.bookingAdvance || 0) : 0;
   const securityDeposit = selectedRoomData ? Number(selectedRoomData.securityDeposit || 0) : 0;
   const totalOpenBeds = hostel.rooms.reduce((sum, room) => sum + Number(room.available || 0), 0);
-  const lowestMoveIn = hostel.rooms.length
+  const moveInEligibleRooms = hostel.rooms.filter(
+    (room) => Number(room.available || 0) > 0 && Number(room.price || 0) > 0,
+  );
+  const lowestMoveIn = moveInEligibleRooms.length
     ? Math.min(
-      ...hostel.rooms.map((room) =>
+      ...moveInEligibleRooms.map((room) =>
         Number(room.price || 0) + Number(room.bookingAdvance || 0) + Number(room.securityDeposit || 0) + 500,
       ),
     )
@@ -302,6 +305,15 @@ export default function HostelDetail({
             </div>
           </div>
         </div>
+      </div>
+      <div className="mobile-booking-bar">
+        <div className="mobile-booking-bar-copy">
+          <strong>Move in from INR {lowestMoveIn.toLocaleString()}</strong>
+          <span>{totalOpenBeds} beds open</span>
+        </div>
+        <button className="mobile-booking-bar-btn" onClick={handleRequestBooking}>
+          {user?.role === "guest" ? "Request" : "Login"}
+        </button>
       </div>
     </div>
   );

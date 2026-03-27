@@ -22,8 +22,8 @@ const sidebarItems = [
   { id: "reviews", label: "Reviews" },
 ];
 
-export default function AdminDashboard({ adminName, onLogout, onToast }) {
-  const [activeTab, setActiveTab] = useState("overview");
+export default function AdminDashboard({ adminName, onLogout, onToast, initialTab = "overview" }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [overview, setOverview] = useState(null);
   const [owners, setOwners] = useState([]);
   const [allOwners, setAllOwners] = useState([]);
@@ -68,7 +68,13 @@ export default function AdminDashboard({ adminName, onLogout, onToast }) {
     loadAll();
   }, []);
 
+  useEffect(() => {
+    setActiveTab(initialTab || "overview");
+  }, [initialTab]);
+
   const handleOwnerAction = async (userId, payload, successMessage) => {
+    const actionLabel = payload.verification_state || payload.status || "update";
+    if (!window.confirm(`Are you sure you want to ${actionLabel} this owner?`)) return;
     try {
       await updateAdminUser(userId, payload);
       onToast(successMessage);
@@ -79,6 +85,7 @@ export default function AdminDashboard({ adminName, onLogout, onToast }) {
   };
 
   const handleHostelAction = async (hostelId, moderationStatus) => {
+    if (!window.confirm(`Are you sure you want to mark this hostel as ${moderationStatus}?`)) return;
     try {
       await updateAdminHostelModeration(hostelId, { moderation_status: moderationStatus });
       onToast(`Hostel ${moderationStatus}.`);
@@ -89,6 +96,7 @@ export default function AdminDashboard({ adminName, onLogout, onToast }) {
   };
 
   const handleComplaintAction = async (complaintId, nextStatus) => {
+    if (!window.confirm(`Are you sure you want to mark this complaint as ${nextStatus}?`)) return;
     try {
       await updateComplaint(complaintId, {
         status: nextStatus,
@@ -102,6 +110,7 @@ export default function AdminDashboard({ adminName, onLogout, onToast }) {
   };
 
   const handleReviewAction = async (reviewId, nextStatus) => {
+    if (!window.confirm(`Are you sure you want to mark this review as ${nextStatus}?`)) return;
     try {
       await updateReview(reviewId, { status: nextStatus });
       onToast(`Review ${nextStatus}.`);
@@ -161,6 +170,20 @@ export default function AdminDashboard({ adminName, onLogout, onToast }) {
           <div className="dash-title">
             {loading ? "Loading..." : `Welcome, ${adminName}`}
           </div>
+        </div>
+
+        <div className="mobile-quick-grid">
+          {[
+            { label: "Owners", value: owners.length, onClick: () => setActiveTab("owners") },
+            { label: "Hostels", value: hostels.length, onClick: () => setActiveTab("hostels") },
+            { label: "Complaints", value: complaints.filter((item) => item.status !== "resolved" && item.status !== "rejected").length, onClick: () => setActiveTab("complaints") },
+            { label: "Reviews", value: reviews.filter((item) => item.status === "pending").length, onClick: () => setActiveTab("reviews") },
+          ].map((item) => (
+            <button key={item.label} className="mobile-quick-card" onClick={item.onClick}>
+              <span className="mobile-quick-label">{item.label}</span>
+              <strong className="mobile-quick-value">{item.value}</strong>
+            </button>
+          ))}
         </div>
 
         {activeTab === "overview" && overview && (
