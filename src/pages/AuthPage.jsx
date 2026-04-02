@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/useAuth";
+import { geocodeAddress } from "../utils/googleMaps";
 
 const ROLE_META = {
   owner: { title: "Hostel Owner", subtitle: "Manage listings, menus, enquiries, and bookings." },
@@ -31,10 +32,13 @@ export default function AuthPage({
     hostelPincode: "",
     hostelGender: "Boys",
     hostelContact: "",
+    hostelGeoLat: "",
+    hostelGeoLng: "",
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
+  const [locationBusy, setLocationBusy] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const isAdminAuth = role === "admin";
 
@@ -82,6 +86,8 @@ export default function AuthPage({
         area: form.hostelArea,
         city: form.hostelCity || "Hyderabad",
         pincode: form.hostelPincode || "",
+        geo_lat: form.hostelGeoLat ? Number(form.hostelGeoLat) : null,
+        geo_lng: form.hostelGeoLng ? Number(form.hostelGeoLng) : null,
         gender_type: form.hostelGender === "Boys" ? "boys" : form.hostelGender === "Girls" ? "girls" : "coed",
         description: "",
         rules: "",
@@ -117,6 +123,34 @@ export default function AuthPage({
     }
 
     setOtpSent(true);
+  };
+
+  const handleLocateHostel = async () => {
+    setError("");
+    const query = [form.hostelAddress, form.hostelArea, form.hostelCity, form.hostelPincode]
+      .filter(Boolean)
+      .join(", ");
+    if (!query.trim()) {
+      setError("Enter hostel area or address before locating it on the map.");
+      return;
+    }
+    setLocationBusy(true);
+    try {
+      const location = await geocodeAddress(query);
+      setForm((prev) => ({
+        ...prev,
+        hostelAddress: location.formattedAddress || prev.hostelAddress,
+        hostelArea: location.area || prev.hostelArea,
+        hostelCity: location.city || prev.hostelCity,
+        hostelPincode: location.pincode || prev.hostelPincode,
+        hostelGeoLat: String(location.lat),
+        hostelGeoLng: String(location.lng),
+      }));
+    } catch (geoError) {
+      setError(geoError.message || "Unable to find this hostel location.");
+    } finally {
+      setLocationBusy(false);
+    }
   };
   return (
     <div className="auth-wrap">
@@ -352,6 +386,25 @@ export default function AuthPage({
                   onChange={(event) => setForm({ ...form, hostelAddress: event.target.value })}
                 />
               </div>
+              <div className="form-group full">
+                <button
+                  className="nav-btn"
+                  type="button"
+                  onClick={handleLocateHostel}
+                  disabled={locationBusy}
+                >
+                  {locationBusy ? "Locating..." : "Locate Hostel on Google Maps"}
+                </button>
+              </div>
+              {(form.hostelGeoLat || form.hostelGeoLng) && (
+                <div className="auth-info">
+                  Map location saved:
+                  {" "}
+                  {form.hostelGeoLat}
+                  {", "}
+                  {form.hostelGeoLng}
+                </div>
+              )}
             </>
           )}
 

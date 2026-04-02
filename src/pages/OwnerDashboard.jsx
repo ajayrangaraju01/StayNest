@@ -23,6 +23,7 @@ import {
   updateReview,
 } from "../api/staynestApi";
 import { createRoomDetails, updateHostelDetails, updateRoomDetails } from "../data/appStore";
+import { geocodeAddress } from "../utils/googleMaps";
 
 const sidebarItems = [
   { id: "overview", label: "Overview" },
@@ -234,6 +235,8 @@ export default function OwnerDashboard({
       city: hostel.city || "",
       address: hostel.address || "",
       pincode: hostel.pincode || "",
+      geoLat: hostel.geoLat ?? "",
+      geoLng: hostel.geoLng ?? "",
       gender: hostel.gender || "Boys",
       contact_number: hostel.contact_number || "",
       description: hostel.description || "",
@@ -361,6 +364,32 @@ export default function OwnerDashboard({
     });
   };
 
+  const handleLocateEditedHostel = async () => {
+    if (!editForm) return;
+    const query = [editForm.address, editForm.area, editForm.city, editForm.pincode]
+      .filter(Boolean)
+      .join(", ");
+    if (!query.trim()) {
+      onToast("Enter hostel area or address before locating it on the map.");
+      return;
+    }
+    try {
+      const location = await geocodeAddress(query);
+      setEditForm((prev) => ({
+        ...prev,
+        address: location.formattedAddress || prev.address,
+        area: location.area || prev.area,
+        city: location.city || prev.city,
+        pincode: location.pincode || prev.pincode,
+        geoLat: String(location.lat),
+        geoLng: String(location.lng),
+      }));
+      onToast("Hostel map location updated.");
+    } catch (error) {
+      onToast(error.message || "Unable to locate hostel on Google Maps.");
+    }
+  };
+
   const handleEditPhotoFiles = async (event) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) {
@@ -485,6 +514,8 @@ export default function OwnerDashboard({
         city: editForm.city,
         address: editForm.address,
         pincode: editForm.pincode,
+        geo_lat: editForm.geoLat ? Number(editForm.geoLat) : null,
+        geo_lng: editForm.geoLng ? Number(editForm.geoLng) : null,
         gender_type: editForm.gender === "Boys" ? "boys" : editForm.gender === "Girls" ? "girls" : "coed",
         contact_number: editForm.contact_number,
         description: editForm.description,
@@ -1223,6 +1254,20 @@ export default function OwnerDashboard({
                       value={editForm.address}
                       onChange={(event) => setEditForm({ ...editForm, address: event.target.value })}
                     />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Latitude</label>
+                    <input className="form-input" value={editForm.geoLat || ""} disabled />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Longitude</label>
+                    <input className="form-input" value={editForm.geoLng || ""} disabled />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Map Location</label>
+                    <button className="nav-btn" type="button" onClick={handleLocateEditedHostel}>
+                      Locate on Google Maps
+                    </button>
                   </div>
                   <div className="form-group full">
                     <label className="form-label">Description</label>

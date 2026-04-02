@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import HostelCard from "../components/HostelCard";
-import { LOCATIONS } from "../data/hostels";
+import { geocodeAddress, haversineDistanceKm } from "../utils/googleMaps";
+
+function normalizeLocationValue(value) {
+  return (value || "").trim().toLowerCase();
+}
 
 export default function HomePage({
   hostels,
@@ -12,6 +16,17 @@ export default function HomePage({
   const [searchQuery, setSearchQuery] = useState("");
   const [genderFilter, setGenderFilter] = useState("All");
   const [locationFilter, setLocationFilter] = useState("All Locations");
+  const [searchPoint, setSearchPoint] = useState(null);
+  const [searchLabel, setSearchLabel] = useState("");
+  const [distanceRadiusKm, setDistanceRadiusKm] = useState(15);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const locationOptions = useMemo(() => {
+    const dynamicLocations = hostels
+      .flatMap((hostel) => [hostel.location, hostel.city])
+      .map((value) => (value || "").trim())
+      .filter(Boolean);
+    return ["All Locations", ...Array.from(new Set(dynamicLocations))];
+  }, [hostels]);
   const verifiedCount = hostels.filter((hostel) => hostel.verified).length;
   const liveLocations = new Set(hostels.map((hostel) => hostel.location).filter(Boolean)).size;
   const activeBeds = hostels.reduce(
@@ -24,20 +39,84 @@ export default function HomePage({
     )
     : 0;
 
-  const filteredHostels = hostels.filter((hostel) => {
-    const normalizedQuery = searchQuery.toLowerCase();
+  const filteredHostels = hostels.map((hostel) => {
+    const exactDistanceKm = searchPoint && hostel.geoLat != null && hostel.geoLng != null
+      ? haversineDistanceKm(
+        searchPoint,
+        { lat: hostel.geoLat, lng: hostel.geoLng },
+      )
+      : null;
+    return {
+      ...hostel,
+      exactDistanceKm,
+      distance: exactDistanceKm != null
+        ? `${exactDistanceKm.toFixed(1)} km from ${searchLabel || "searched location"}`
+        : hostel.distance,
+    };
+  }).filter((hostel) => {
+    const normalizedQuery = normalizeLocationValue(searchQuery);
+    const normalizedLocationFilter = normalizeLocationValue(locationFilter);
+    const searchableText = [
+      hostel.location,
+      hostel.city,
+      hostel.name,
+      hostel.address,
+      hostel.pincode,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
     const matchesSearch =
       !searchQuery ||
-      hostel.location.toLowerCase().includes(normalizedQuery) ||
-      hostel.city.toLowerCase().includes(normalizedQuery) ||
-      hostel.name.toLowerCase().includes(normalizedQuery);
+      searchableText.includes(normalizedQuery);
 
     const matchesGender =
       genderFilter === "All" || hostel.gender === genderFilter || hostel.gender === "Co-Live";
-    const matchesLocation = locationFilter === "All Locations" || hostel.location === locationFilter;
+    const matchesLocation =
+      locationFilter === "All Locations" ||
+      [
+        hostel.location,
+        hostel.city,
+        hostel.address,
+        `${hostel.location} ${hostel.city}`,
+      ]
+        .filter(Boolean)
+        .some((value) => normalizeLocationValue(value).includes(normalizedLocationFilter));
 
-    return matchesSearch && matchesGender && matchesLocation;
+    const matchesDistance =
+      !searchPoint
+      || hostel.exactDistanceKm == null
+      || hostel.exactDistanceKm <= distanceRadiusKm;
+
+    return matchesSearch && matchesGender && matchesLocation && matchesDistance;
+  }).sort((a, b) => {
+    if (searchPoint) {
+      const aDistance = a.exactDistanceKm ?? Number.POSITIVE_INFINITY;
+      const bDistance = b.exactDistanceKm ?? Number.POSITIVE_INFINITY;
+      if (aDistance !== bDistance) return aDistance - bDistance;
+    }
+    return a.name.localeCompare(b.name);
   });
+
+  const handleSearchClick = async () => {
+    onSearch(searchQuery);
+    if (!searchQuery.trim()) {
+      setSearchPoint(null);
+      setSearchLabel("");
+      return;
+    }
+    setSearchBusy(true);
+    try {
+      const location = await geocodeAddress(searchQuery);
+      setSearchPoint({ lat: location.lat, lng: location.lng });
+      setSearchLabel(location.area || location.city || searchQuery.trim());
+    } catch {
+      setSearchPoint(null);
+      setSearchLabel("");
+    } finally {
+      setSearchBusy(false);
+    }
+  };
 
   return (
     <div>
@@ -66,12 +145,27 @@ export default function HomePage({
             placeholder="Search by location, area or hostel name..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && onSearch(searchQuery)}
+            onKeyDown={(event) => event.key === "Enter" && handleSearchClick()}
           />
-          <button className="hero-search-btn" onClick={() => onSearch(searchQuery)}>
-            Search Hostels
+          <button className="hero-search-btn" onClick={handleSearchClick} disabled={searchBusy}>
+            {searchBusy ? "Searching..." : "Search Hostels"}
           </button>
         </div>
+        {searchPoint && (
+          <div className="card-signal-row" style={{ marginTop: 14 }}>
+            <span className="card-signal">Showing nearest stays from {searchLabel}</span>
+            {[5, 10, 15, 25].map((radius) => (
+              <button
+                key={radius}
+                type="button"
+                className={`filter-chip${distanceRadiusKm === radius ? " active" : ""}`}
+                onClick={() => setDistanceRadiusKm(radius)}
+              >
+                Within {radius} km
+              </button>
+            ))}
+          </div>
+        )}
         <div className="hero-stats">
           {[
             [`${verifiedCount}+`, "Verified Hostels"],
@@ -111,7 +205,7 @@ export default function HomePage({
         </div>
 
         <div className="filters">
-          {LOCATIONS.map((location) => (
+          {locationOptions.map((location) => (
             <button
               key={location}
               className={`filter-chip${locationFilter === location ? " active" : ""}`}
