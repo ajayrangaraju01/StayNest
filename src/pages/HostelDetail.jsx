@@ -14,7 +14,9 @@ export default function HostelDetail({
   const [selectedRoom, setSelectedRoom] = useState(
     hostel.rooms.find((room) => room.available > 0)?.type || "",
   );
+  const [stayType, setStayType] = useState("monthly");
   const [moveInDate, setMoveInDate] = useState("");
+  const [moveOutDate, setMoveOutDate] = useState("");
   const [message, setMessage] = useState("");
 
   const selectedRoomData = hostel.rooms.find((room) => room.type === selectedRoom);
@@ -31,10 +33,22 @@ export default function HostelDetail({
       ),
     )
     : 0;
+  const dailyEligibleRooms = hostel.rooms.filter(
+    (room) => Number(room.available || 0) > 0 && Number(room.dailyPrice || 0) > 0,
+  );
+  const lowestDailyRate = dailyEligibleRooms.length
+    ? Math.min(...dailyEligibleRooms.map((room) => Number(room.dailyPrice || 0)))
+    : 0;
+  const totalDays = moveInDate && moveOutDate
+    ? Math.max(0, Math.ceil((new Date(moveOutDate) - new Date(moveInDate)) / (1000 * 60 * 60 * 24)))
+    : 0;
+  const dailyBookingTotal = selectedRoomData
+    ? (Number(selectedRoomData.dailyPrice || 0) * totalDays)
+    : 0;
   const quickSignals = [
     `${totalOpenBeds} beds open`,
     hostel.verified ? "Owner verified" : "Approval pending",
-    `${hostel.rooms.length} share options`,
+    lowestDailyRate > 0 ? `From INR ${lowestDailyRate.toLocaleString()}/day` : `${hostel.rooms.length} share options`,
   ];
 
   const handleRequestBooking = () => {
@@ -48,6 +62,21 @@ export default function HostelDetail({
       return;
     }
 
+    if (stayType === "daily") {
+      if (!moveOutDate) {
+        onToast("Please select your move-out date.");
+        return;
+      }
+      if (totalDays <= 0) {
+        onToast("Move-out date must be after move-in date.");
+        return;
+      }
+      if (Number(selectedRoomData.dailyPrice || 0) <= 0) {
+        onToast("Daily price is not available for this room type.");
+        return;
+      }
+    }
+
     if (!user || user.role !== "guest") {
       onRequireStudentLogin();
       return;
@@ -56,6 +85,9 @@ export default function HostelDetail({
     onBookingRequest({
       roomType: selectedRoomData.type,
       moveInDate,
+      moveOutDate: stayType === "daily" ? moveOutDate : "",
+      stayType,
+      totalDays: stayType === "daily" ? totalDays : 0,
       message,
     });
   };
@@ -163,6 +195,9 @@ export default function HostelDetail({
                         {room.price.toLocaleString()}
                       </div>
                       <div className="room-price-label">per month</div>
+                      {Number(room.dailyPrice || 0) > 0 && (
+                        <div className="room-price-label">INR {Number(room.dailyPrice || 0).toLocaleString()} / day</div>
+                      )}
                     </div>
                     <button
                       className="room-book-btn"
@@ -199,7 +234,7 @@ export default function HostelDetail({
           <div>
             <div className="booking-sidebar">
               <div className="booking-title">Request to Join</div>
-              <div className="booking-sub">Select room type and move-in date to see the owner-set fee breakup</div>
+              <div className="booking-sub">Select room type and stay plan to see the owner-set monthly or daily pricing</div>
               <div className="booking-trust-box">
                 <div className="booking-trust-item">
                   <span>Hostel Status</span>
@@ -230,6 +265,7 @@ export default function HostelDetail({
                     {" "}
                     {room.price.toLocaleString()}
                     /mo
+                    {Number(room.dailyPrice || 0) > 0 ? ` | INR ${Number(room.dailyPrice || 0).toLocaleString()}/day` : ""}
                     {" "}
                     {room.available === 0 ? "(Full)" : ""}
                   </option>
@@ -237,7 +273,31 @@ export default function HostelDetail({
               </select>
 
               <div className="form-group" style={{ marginBottom: 10 }}>
-                <label className="form-label">Move-in Date</label>
+                <label className="form-label">Stay Plan</label>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {[
+                    { value: "monthly", label: "Monthly Stay" },
+                    { value: "daily", label: "Day Wise Stay" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className="room-book-btn"
+                      onClick={() => setStayType(option.value)}
+                      style={{
+                        borderColor: stayType === option.value ? "var(--terra)" : "var(--cream-dark)",
+                        background: stayType === option.value ? "rgba(174, 93, 68, 0.12)" : "white",
+                        color: "var(--ink)",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 10 }}>
+                <label className="form-label">{stayType === "daily" ? "Check-in Date" : "Move-in Date"}</label>
                 <input
                   className="form-input"
                   type="date"
@@ -245,6 +305,19 @@ export default function HostelDetail({
                   onChange={(event) => setMoveInDate(event.target.value)}
                 />
               </div>
+
+              {stayType === "daily" && (
+                <div className="form-group" style={{ marginBottom: 10 }}>
+                  <label className="form-label">Check-out Date</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={moveOutDate}
+                    min={moveInDate || undefined}
+                    onChange={(event) => setMoveOutDate(event.target.value)}
+                  />
+                </div>
+              )}
 
               <div className="form-group" style={{ marginBottom: 14 }}>
                 <label className="form-label">Message to Owner</label>
@@ -268,6 +341,14 @@ export default function HostelDetail({
                     </strong>
                   </div>
                   <div className="booking-price-row">
+                    <span>Day-wise Price</span>
+                    <strong>
+                      INR
+                      {" "}
+                      {Number(selectedRoomData.dailyPrice || 0).toLocaleString()}
+                    </strong>
+                  </div>
+                  <div className="booking-price-row">
                     <span>Booking Advance</span>
                     <strong>
                       INR
@@ -283,19 +364,39 @@ export default function HostelDetail({
                       {securityDeposit.toLocaleString()}
                     </strong>
                   </div>
-                  <div className="booking-price-row">
-                    <span>Maintenance</span>
-                    <strong>INR 500</strong>
-                  </div>
-                  <hr className="booking-divider" />
-                  <div className="booking-total">
-                    <span>Total at Move-in</span>
-                    <span>
-                      INR
-                      {" "}
-                      {(bookingAdvance + securityDeposit + selectedRoomData.price + 500).toLocaleString()}
-                    </span>
-                  </div>
+                  {stayType === "daily" ? (
+                    <>
+                      <div className="booking-price-row">
+                        <span>Total Days</span>
+                        <strong>{totalDays || 0}</strong>
+                      </div>
+                      <hr className="booking-divider" />
+                      <div className="booking-total">
+                        <span>Estimated Stay Total</span>
+                        <span>
+                          INR
+                          {" "}
+                          {dailyBookingTotal.toLocaleString()}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="booking-price-row">
+                        <span>Maintenance</span>
+                        <strong>INR 500</strong>
+                      </div>
+                      <hr className="booking-divider" />
+                      <div className="booking-total">
+                        <span>Total at Move-in</span>
+                        <span>
+                          INR
+                          {" "}
+                          {(bookingAdvance + securityDeposit + selectedRoomData.price + 500).toLocaleString()}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 

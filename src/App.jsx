@@ -212,7 +212,14 @@ export default function App() {
   };
 
 
-  const handleBookingRequest = async ({ roomType, moveInDate, message }) => {
+  const handleBookingRequest = async ({
+    roomType,
+    moveInDate,
+    moveOutDate,
+    stayType,
+    totalDays,
+    message,
+  }) => {
     if (!selectedHostel) return;
 
     if (!user || user.role !== "guest") {
@@ -230,6 +237,9 @@ export default function App() {
       roomType,
       roomId: matchingRoom?.id || null,
       moveInDate,
+      moveOutDate,
+      stayType,
+      totalDays,
       message,
     });
 

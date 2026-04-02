@@ -221,6 +221,7 @@ export default function OwnerDashboard({
       id: room.id,
       type: room.type,
       price: room.price,
+      dailyPrice: room.dailyPrice || 0,
       bookingAdvance: room.bookingAdvance || 0,
       securityDeposit: room.securityDeposit || 0,
       total: room.total,
@@ -280,6 +281,7 @@ export default function OwnerDashboard({
               ? {
                 ...room,
                 price: value,
+                dailyPrice: room.dailyPrice ?? 0,
                 bookingAdvance: room.bookingAdvance ?? 0,
                 securityDeposit: room.securityDeposit ?? 0,
                 total: currentCalculatedTotal || room.total,
@@ -297,6 +299,7 @@ export default function OwnerDashboard({
             id: null,
             type: roomTypeLabel,
             price: value,
+            dailyPrice: 0,
             bookingAdvance: 0,
             securityDeposit: 0,
             total: currentCalculatedTotal,
@@ -509,6 +512,7 @@ export default function OwnerDashboard({
               : room.type === "5 Share" ? "five"
               : "six",
             monthly_rent: Number(room.price || 0),
+            daily_rent: Number(room.dailyPrice || 0),
             booking_advance: Number(room.bookingAdvance || 0),
             security_deposit: Number(room.securityDeposit || 0),
             total_beds: total,
@@ -537,6 +541,7 @@ export default function OwnerDashboard({
           const occupied = Math.max(0, total - available);
           const roomPayload = {
             monthly_rent: Number(room.price || 0),
+            daily_rent: Number(room.dailyPrice || 0),
             booking_advance: Number(room.bookingAdvance || 0),
             security_deposit: Number(room.securityDeposit || 0),
             total_beds: total,
@@ -1423,9 +1428,9 @@ export default function OwnerDashboard({
                 <div className="form-section" style={{ marginTop: 16 }}>
                   <div className="form-section-title">Fee, Booking Advance & Security Deposit</div>
                   <p style={{ margin: "0 0 12px", color: "var(--warm-gray)", fontSize: 13 }}>
-                    Set the monthly fee, one-time booking advance, and refundable security deposit for each share type.
+                    Set the monthly fee, day-wise price, one-time booking advance, and refundable security deposit for each share type.
                   </p>
-                  <div className="form-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
                     {shareTypeConfig.map((item) => {
                       const room = editForm.rooms.find((entry) => entry.type === item.label);
                       return (
@@ -1438,6 +1443,16 @@ export default function OwnerDashboard({
                               value={room?.price ?? ""}
                               onChange={(event) => handleSharePriceChange(item.label, event.target.value)}
                               placeholder={`Enter fee for ${item.label}`}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">{item.label} Day-wise Price</label>
+                            <input
+                              className="form-input"
+                              type="number"
+                              value={room?.dailyPrice ?? ""}
+                              onChange={(event) => handleRoomChange(room?.id, "dailyPrice", event.target.value, item.label)}
+                              placeholder={`Daily price for ${item.label}`}
                             />
                           </div>
                           <div className="form-group">
@@ -1469,7 +1484,7 @@ export default function OwnerDashboard({
                 <div className="form-section" style={{ marginTop: 16 }}>
                   <div className="form-section-title">Rooms</div>
                   {editForm.rooms.map((room) => (
-                    <div className="form-grid" key={room.id || room.type} style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+                    <div className="form-grid" key={room.id || room.type} style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                       <div className="form-group">
                         <label className="form-label">{room.type} Price</label>
                         <input
@@ -1477,6 +1492,15 @@ export default function OwnerDashboard({
                           type="number"
                           value={room.price}
                           onChange={(event) => handleRoomChange(room.id, "price", event.target.value, room.type)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">{room.type} Day-wise Price</label>
+                        <input
+                          className="form-input"
+                          type="number"
+                          value={room.dailyPrice || ""}
+                          onChange={(event) => handleRoomChange(room.id, "dailyPrice", event.target.value, room.type)}
                         />
                       </div>
                       <div className="form-group">

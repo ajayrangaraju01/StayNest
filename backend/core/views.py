@@ -108,6 +108,7 @@ def apply_pending_hostel_update(hostel):
         payload = {
             "type": room_payload.get("type"),
             "monthly_rent": room_payload.get("monthly_rent", 0),
+            "daily_rent": room_payload.get("daily_rent", 0),
             "booking_advance": room_payload.get("booking_advance", 0),
             "security_deposit": room_payload.get("security_deposit", 0),
             "total_beds": room_payload.get("total_beds", 0),
@@ -1011,8 +1012,19 @@ class BookingViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         room = serializer.validated_data.get("room")
+        stay_type = serializer.validated_data.get("stay_type", Booking.StayType.MONTHLY)
+        move_in_date = serializer.validated_data.get("move_in_date")
+        move_out_date = serializer.validated_data.get("move_out_date")
+        total_days = serializer.validated_data.get("total_days", 0)
         if room and room.occupied_beds >= room.total_beds:
             return Response({"detail": "No beds available for this room."}, status=status.HTTP_400_BAD_REQUEST)
+        if stay_type == Booking.StayType.DAILY:
+            if not move_in_date or not move_out_date:
+                return Response({"detail": "Daily booking requires move-in and move-out dates."}, status=status.HTTP_400_BAD_REQUEST)
+            if move_out_date <= move_in_date:
+                return Response({"detail": "Move-out date must be after move-in date."}, status=status.HTTP_400_BAD_REQUEST)
+            if total_days <= 0:
+                return Response({"detail": "Total days must be greater than zero for daily bookings."}, status=status.HTTP_400_BAD_REQUEST)
         self.perform_create(serializer)
         booking = serializer.instance
         Notification.objects.create(

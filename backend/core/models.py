@@ -66,6 +66,7 @@ class Room(models.Model):
     room_number = models.CharField(max_length=40, blank=True)
     type = models.CharField(max_length=20, choices=RoomType.choices)
     monthly_rent = models.DecimalField(max_digits=10, decimal_places=2)
+    daily_rent = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     booking_advance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     security_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_beds = models.PositiveSmallIntegerField()
@@ -77,6 +78,10 @@ class Room(models.Model):
 
 
 class Booking(models.Model):
+    class StayType(models.TextChoices):
+        MONTHLY = "monthly", "Monthly"
+        DAILY = "daily", "Daily"
+
     class Status(models.TextChoices):
         REQUESTED = "requested", "Requested"
         APPROVED = "approved", "Approved"
@@ -90,6 +95,8 @@ class Booking(models.Model):
     room = models.ForeignKey(Room, on_delete=models.SET_NULL, null=True, blank=True)
     assigned_room_number = models.CharField(max_length=40, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
+    stay_type = models.CharField(max_length=20, choices=StayType.choices, default=StayType.MONTHLY)
+    total_days = models.PositiveSmallIntegerField(default=0)
     message = models.TextField(blank=True)
     student_phone = models.CharField(max_length=20, blank=True)
     move_in_date = models.DateField(null=True, blank=True)
