@@ -27,7 +27,7 @@ import { createRoomDetails, updateHostelDetails, updateRoomDetails } from "../da
 import { geocodeAddress, reverseGeocodeLatLng } from "../utils/googleMaps";
 
 const sidebarItems = [
-  { id: "overview", label: "Overview" },
+  { id: "overview", label: "Dashboard" },
   { id: "edit", label: "Edit Hostel" },
   { id: "students", label: "Guests" },
   { id: "enquiries", label: "Booking Requests" },
@@ -54,6 +54,8 @@ export default function OwnerDashboard({
   onLogout,
   onRefreshHostels,
 }) {
+  const todayForDues = new Date();
+  const startOfTodayForDues = new Date(todayForDues.getFullYear(), todayForDues.getMonth(), todayForDues.getDate());
   const amenityOptions = [
     "WiFi",
     "AC",
@@ -180,6 +182,10 @@ export default function OwnerDashboard({
     };
   }, [hostels, requests]);
 
+  const expectedThisMonth = Number(ownerAnalytics?.expected_this_month ?? ownerAnalytics?.monthly_revenue ?? 0);
+  const collectedThisMonth = Number(ownerAnalytics?.monthly_collected ?? 0);
+  const outstandingThisMonth = Math.max(0, expectedThisMonth - collectedThisMonth);
+
   const floorTypeLabel = {
     double: "2 Share",
     triple: "3 Share",
@@ -218,6 +224,30 @@ export default function OwnerDashboard({
   const selectTab = (tab) => {
     setActiveTab(tab);
     onTabChange?.(tab);
+  };
+
+  const getDueMeta = (dueDate) => {
+    if (!dueDate) {
+      return {
+        title: "Upcoming Payment",
+        text: "No pending fee",
+        overdue: false,
+        dueToday: false,
+      };
+    }
+    const parsed = new Date(`${dueDate}T00:00:00`);
+    const dueToday = !Number.isNaN(parsed.getTime()) && parsed.getTime() === startOfTodayForDues.getTime();
+    const overdue = !Number.isNaN(parsed.getTime()) && parsed < startOfTodayForDues;
+    return {
+      title: overdue ? "Overdue Payment" : dueToday ? "Payment Due Today" : "Upcoming Payment",
+      text: overdue
+        ? `Overdue since ${formatDisplayDate(dueDate)}`
+        : dueToday
+          ? `Due today ${formatDisplayDate(dueDate)}`
+          : `Due ${formatDisplayDate(dueDate)}`,
+      overdue,
+      dueToday,
+    };
   };
 
   const calculatedRoomTotals = useMemo(() => {
@@ -735,7 +765,7 @@ export default function OwnerDashboard({
 
   useEffect(() => {
     const loadOpsData = async () => {
-      if (!["fees", "menu", "leaves", "complaints", "reviews"].includes(activeTab)) return;
+      if (!["overview", "fees", "menu", "leaves", "complaints", "reviews"].includes(activeTab)) return;
       try {
         const [ledgerData, menuData, leaveData, complaintData, reviewData, trustData, analyticsData, defaulterData] = await Promise.all([
           fetchFeeLedgers(),
@@ -808,6 +838,8 @@ export default function OwnerDashboard({
   }, [students, guestSortBy]);
   const activeGuests = sortedStudents.filter((student) => student.status !== "checked_out");
   const checkedOutGuests = sortedStudents.filter((student) => student.status === "checked_out");
+  const dueTodayGuests = activeGuests.filter((student) => getDueMeta(student.upcoming_fee_due_date).dueToday);
+  const overdueGuests = activeGuests.filter((student) => getDueMeta(student.upcoming_fee_due_date).overdue);
 
   const handleGuestFieldChange = (guestId, field, value) => {
     setGuestEditForms((prev) => ({
@@ -1112,69 +1144,89 @@ export default function OwnerDashboard({
                 </div>
               ))}
             </div>
-            <div className="form-section" style={{ marginBottom: 18 }}>
-              <div className="form-section-title">Next Best Actions</div>
-              <div className="workflow-grid">
-                {ownerActionItems.map((item) => (
-                  <div key={item.title} className="workflow-card">
-                    <div className="workflow-card-title">{item.title}</div>
-                    <p className="workflow-card-desc">{item.desc}</p>
-                    <button className="card-cta" onClick={() => selectTab(item.tab)}>
-                      {item.cta}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="form-section" style={{ marginBottom: 18 }}>
-              <div className="form-section-title">Owner Profile</div>
-              <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
-                <div>
-                  Name:
-                  {" "}
-                  <strong>{ownerName}</strong>
-                </div>
-                <div>
-                  Phone:
-                  {" "}
-                  <strong>{ownerPhone || "Not provided"}</strong>
-                </div>
-                <div>
-                  Role:
-                  {" "}
-                  <strong>{ownerRole}</strong>
-                </div>
-                <div>
-                  Status:
-                  {" "}
-                  <strong>{ownerStatus}</strong>
-                </div>
-                {trustSummary && (
-                  <div>
-                    Published Reviews:
-                    {" "}
-                    <strong>{trustSummary.published_reviews_count}</strong>
-                  </div>
-                )}
-              </div>
-              <div className="card-signal-row" style={{ marginTop: 16 }}>
-                {ownerHighlights.map((item) => (
-                  <span key={item} className="card-signal">{item}</span>
-                ))}
-              </div>
-            </div>
-            <div className="stats-row">
-              {[
-                { label: "Your Hostels", num: stats.totalHostels },
-                { label: "Total Beds", num: stats.totalBeds },
-                { label: "Available Beds", num: stats.availableBeds },
-                { label: "Pending Requests", num: stats.pendingRequests },
-              ].map((stat) => (
+              <div className="stats-row">
+                {[
+                  { label: "Your Hostels", num: stats.totalHostels },
+                  { label: "Active Guests", num: ownerAnalytics?.active_guests_count ?? approvedStudents.length },
+                  { label: "Expected This Month", num: `INR ${expectedThisMonth}` },
+                  { label: "Collected This Month", num: `INR ${collectedThisMonth}` },
+                  { label: "Outstanding This Month", num: `INR ${outstandingThisMonth}` },
+                  { label: "Occupancy %", num: `${ownerAnalytics?.occupancy_rate ?? 0}%` },
+                  { label: "Check-ins Today", num: ownerAnalytics?.checkins_today ?? 0 },
+                  { label: "Check-outs Today", num: ownerAnalytics?.checkouts_today ?? 0 },
+                  { label: "Pending Requests", num: stats.pendingRequests },
+                ].map((stat) => (
                 <div className="stat-card" key={stat.label}>
                   <div className="stat-num">{stat.num}</div>
                   <div className="stat-label">{stat.label}</div>
                 </div>
               ))}
+            </div>
+            <div className="form-section" style={{ marginTop: 18, marginBottom: 18 }}>
+              <div className="form-section-title">Room Type Occupancy</div>
+              <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                {(ownerAnalytics?.room_type_occupancy || []).length === 0 && (
+                  <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No room occupancy data yet.</p>
+                )}
+                {(ownerAnalytics?.room_type_occupancy || []).map((item) => (
+                  <div key={item.type} className="edit-compact-card">
+                    <div style={{ fontWeight: 700, color: "var(--espresso)" }}>{item.label}</div>
+                    <div style={{ fontSize: 14, color: "var(--warm-gray)" }}>
+                      {item.occupied_beds}/{item.total_beds} beds occupied
+                    </div>
+                    <div style={{ fontWeight: 700, marginTop: 4 }}>
+                      {item.occupancy_rate}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="form-section" style={{ marginTop: 18, marginBottom: 18 }}>
+              <div className="form-section-title">Payment Attention</div>
+              <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+                <div className="edit-compact-card">
+                  <div style={{ fontWeight: 700, color: "var(--espresso)" }}>Due Today</div>
+                  {dueTodayGuests.length === 0 ? (
+                    <div style={{ fontSize: 13, color: "var(--warm-gray)" }}>No guests are due today.</div>
+                  ) : (
+                    dueTodayGuests.slice(0, 5).map((student) => (
+                      <button
+                        key={`due-today-${student.student_id}`}
+                        type="button"
+                        className="mobile-menu-item"
+                        style={{ padding: "12px 14px", background: "#fffaf3" }}
+                        onClick={() => {
+                          selectTab("students");
+                          setGuestDetailId(student.student_id);
+                        }}
+                      >
+                        {student.student_name} | INR {student.upcoming_fee_amount || "0"} | {formatDisplayDate(student.upcoming_fee_due_date)}
+                      </button>
+                    ))
+                  )}
+                </div>
+                <div className="edit-compact-card">
+                  <div style={{ fontWeight: 700, color: "#b91c1c" }}>Overdue Payments</div>
+                  {overdueGuests.length === 0 ? (
+                    <div style={{ fontSize: 13, color: "var(--warm-gray)" }}>No overdue payments right now.</div>
+                  ) : (
+                    overdueGuests.slice(0, 5).map((student) => (
+                      <button
+                        key={`overdue-${student.student_id}`}
+                        type="button"
+                        className="mobile-menu-item"
+                        style={{ padding: "12px 14px", background: "#fff7f7", borderColor: "#fecaca", color: "#991b1b" }}
+                        onClick={() => {
+                          selectTab("students");
+                          setGuestDetailId(student.student_id);
+                        }}
+                      >
+                        {student.student_name} | INR {student.upcoming_fee_amount || "0"} | {formatDisplayDate(student.upcoming_fee_due_date)}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
             <div className="form-section">
               <div className="form-section-title">Your Listings</div>
@@ -1241,6 +1293,20 @@ export default function OwnerDashboard({
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="form-section" style={{ marginTop: 18 }}>
+              <div className="form-section-title">Next Best Actions</div>
+              <div className="workflow-grid">
+                {ownerActionItems.map((item) => (
+                  <div key={item.title} className="workflow-card">
+                    <div className="workflow-card-title">{item.title}</div>
+                    <p className="workflow-card-desc">{item.desc}</p>
+                    <button className="card-cta" onClick={() => selectTab(item.tab)}>
+                      {item.cta}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </>
         )}
@@ -1806,12 +1872,18 @@ export default function OwnerDashboard({
                 </div>
               </div>
               <div style={{ minWidth: 220, textAlign: "right" }}>
-                <div style={{ fontSize: 12, color: "var(--warm-gray)" }}>Upcoming Payment</div>
+                <div style={{ fontSize: 12, color: "var(--warm-gray)" }}>{getDueMeta(selectedGuest.upcoming_fee_due_date).title}</div>
                 <div style={{ fontWeight: 700, marginTop: 4 }}>
                   INR {selectedGuest.upcoming_fee_amount || "0"}
                 </div>
-                <div style={{ fontSize: 12, color: "var(--warm-gray)", marginTop: 4 }}>
-                  {selectedGuest.upcoming_fee_due_date ? `Due ${formatDisplayDate(selectedGuest.upcoming_fee_due_date)}` : "No pending fee"}
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: getDueMeta(selectedGuest.upcoming_fee_due_date).overdue ? "#b91c1c" : "var(--warm-gray)",
+                    marginTop: 4,
+                  }}
+                >
+                  {getDueMeta(selectedGuest.upcoming_fee_due_date).text}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--warm-gray)", marginTop: 8 }}>
                   Trust {selectedGuest.trust_score ?? 0} | {selectedGuest.verification_state || "unverified"}
@@ -2153,14 +2225,20 @@ export default function OwnerDashboard({
                         </div>
                       </div>
                       <div style={{ minWidth: 190, textAlign: "right" }}>
-                        <div style={{ fontSize: 12, color: "var(--warm-gray)" }}>Upcoming Payment</div>
+                        <div style={{ fontSize: 12, color: "var(--warm-gray)" }}>{getDueMeta(student.upcoming_fee_due_date).title}</div>
                         {student.upcoming_fee_due_date ? (
                           <>
                             <div style={{ fontWeight: 700, marginTop: 4 }}>
                               INR {student.upcoming_fee_amount || "0"}
                             </div>
-                            <div style={{ fontSize: 12, color: "var(--warm-gray)", marginTop: 4 }}>
-                              Due {formatDisplayDate(student.upcoming_fee_due_date)}
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: getDueMeta(student.upcoming_fee_due_date).overdue ? "#b91c1c" : "var(--warm-gray)",
+                                marginTop: 4,
+                              }}
+                            >
+                              {getDueMeta(student.upcoming_fee_due_date).text}
                             </div>
                           </>
                         ) : (
@@ -2629,6 +2707,49 @@ export default function OwnerDashboard({
               ))}
             </div>
           </>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="form-section">
+            <div className="form-section-title">Profile Settings</div>
+            <div style={{ display: "grid", gap: 10, fontSize: 14, marginBottom: 18 }}>
+              <div>
+                Name:
+                {" "}
+                <strong>{ownerName}</strong>
+              </div>
+              <div>
+                Phone:
+                {" "}
+                <strong>{ownerPhone || "Not provided"}</strong>
+              </div>
+              <div>
+                Role:
+                {" "}
+                <strong>{ownerRole}</strong>
+              </div>
+              <div>
+                Status:
+                {" "}
+                <strong>{ownerStatus}</strong>
+              </div>
+              {trustSummary && (
+                <div>
+                  Published Reviews:
+                  {" "}
+                  <strong>{trustSummary.published_reviews_count}</strong>
+                </div>
+              )}
+            </div>
+            <div className="card-signal-row" style={{ marginBottom: 18 }}>
+              {ownerHighlights.map((item) => (
+                <span key={item} className="card-signal">{item}</span>
+              ))}
+            </div>
+            <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>
+              More owner settings and payout preferences can be added here in the next phase.
+            </p>
+          </div>
         )}
       </div>
     </div>

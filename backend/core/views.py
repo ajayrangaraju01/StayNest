@@ -49,6 +49,72 @@ def add_months_safe(base_date, months):
     return date(year, month, day)
 
 
+def ledger_outstanding_amount(ledger):
+    return max(Decimal("0"), (ledger.amount_due + ledger.late_fee) - ledger.amount_paid)
+
+
+def get_booking_due_dates(move_in_date, today):
+    if not move_in_date:
+        return None, None
+    current_due = date(
+        today.year,
+        today.month,
+        min(move_in_date.day, calendar.monthrange(today.year, today.month)[1]),
+    )
+    if current_due < move_in_date:
+        current_due = move_in_date
+    next_due = add_months_safe(current_due, 1)
+    return current_due, next_due
+
+
+def get_booking_fee_snapshot(booking, today):
+    fallback_amount = booking.room.monthly_rent if booking.room else Decimal("0")
+    current_due, next_due = get_booking_due_dates(booking.move_in_date, today)
+    ledgers = list(
+        FeeLedger.objects.filter(hostel=booking.hostel, student=booking.student).order_by("due_date", "created_at")
+    )
+    outstanding_ledgers = [ledger for ledger in ledgers if ledger_outstanding_amount(ledger) > 0]
+    active_booking = booking.status != Booking.Status.CHECKED_OUT
+
+    overdue_or_due_now = next((ledger for ledger in outstanding_ledgers if ledger.due_date <= today), None)
+    if overdue_or_due_now:
+        return overdue_or_due_now, current_due, next_due
+
+    current_cycle_ledger = next((ledger for ledger in ledgers if current_due and ledger.due_date == current_due), None)
+    current_cycle_paid = current_cycle_ledger and ledger_outstanding_amount(current_cycle_ledger) <= 0
+
+    if active_booking and current_due and current_due <= today and not current_cycle_paid:
+        if current_cycle_ledger:
+            return current_cycle_ledger, current_due, next_due
+        return FeeLedger(
+            hostel=booking.hostel,
+            student=booking.student,
+            month=current_due,
+            amount_due=fallback_amount,
+            amount_paid=Decimal("0"),
+            due_date=current_due,
+            late_fee=Decimal("0"),
+            status=FeeLedger.Status.PENDING if current_due == today else FeeLedger.Status.OVERDUE,
+        ), current_due, next_due
+
+    if outstanding_ledgers:
+        return outstanding_ledgers[0], current_due, next_due
+
+    if active_booking and next_due:
+        return FeeLedger(
+            hostel=booking.hostel,
+            student=booking.student,
+            month=next_due,
+            amount_due=fallback_amount,
+            amount_paid=Decimal("0"),
+            due_date=next_due,
+            late_fee=Decimal("0"),
+            status=FeeLedger.Status.PENDING,
+        ), current_due, next_due
+
+    return None, current_due, next_due
+
+
 def sync_room_occupancy(room_ids=None):
     rooms = Room.objects.all() if room_ids is None else Room.objects.filter(id__in=set(room_ids))
     for room in rooms:
@@ -153,53 +219,8 @@ def owner_students(request):
     data = []
     for booking in bookings:
         profile = getattr(booking.student, "student_profile", None)
-        next_due_date = None
-        fallback_amount = booking.room.monthly_rent if booking.room else Decimal("0")
-        if booking.move_in_date:
-            today = timezone.now().date()
-            join_day = booking.move_in_date.day
-            year = today.year
-            month = today.month
-            last_day_this_month = calendar.monthrange(year, month)[1]
-            candidate_date = today.replace(day=min(join_day, last_day_this_month))
-            if candidate_date <= today:
-                if month == 12:
-                    year += 1
-                    month = 1
-                else:
-                    month += 1
-                last_day_next_month = calendar.monthrange(year, month)[1]
-                candidate_date = candidate_date.replace(
-                    year=year,
-                    month=month,
-                    day=min(join_day, last_day_next_month),
-                )
-            next_due_date = candidate_date
-
-        upcoming_fee = (
-            FeeLedger.objects.filter(
-                hostel=booking.hostel,
-                student=booking.student,
-                status__in=[
-                    FeeLedger.Status.PENDING,
-                    FeeLedger.Status.PARTIAL,
-                    FeeLedger.Status.OVERDUE,
-                ],
-            )
-            .order_by("due_date")
-            .first()
-        )
-        if not upcoming_fee and next_due_date and booking.status != Booking.Status.CHECKED_OUT:
-            upcoming_fee = FeeLedger(
-                hostel=booking.hostel,
-                student=booking.student,
-                month=next_due_date,
-                amount_due=fallback_amount,
-                amount_paid=Decimal("0"),
-                due_date=next_due_date,
-                late_fee=Decimal("0"),
-                status=FeeLedger.Status.PENDING,
-            )
+        today = timezone.now().date()
+        upcoming_fee, _, _ = get_booking_fee_snapshot(booking, today)
         fee_history = (
             FeeLedger.objects.filter(hostel=booking.hostel, student=booking.student)
             .prefetch_related("payments")
@@ -226,7 +247,7 @@ def owner_students(request):
                 "age": profile.age if profile else None,
                 "gender": profile.gender if profile else "",
                 "upcoming_fee_due_date": upcoming_fee.due_date if upcoming_fee else None,
-                "upcoming_fee_amount": str(upcoming_fee.amount_due) if upcoming_fee else "",
+                "upcoming_fee_amount": str(ledger_outstanding_amount(upcoming_fee) if getattr(upcoming_fee, "id", None) else upcoming_fee.amount_due) if upcoming_fee else "",
                 "fee_history": [
                     {
                         "id": ledger.id,
@@ -573,17 +594,13 @@ def student_overview(request):
         return Response({"joined": False, "hostel": None, "upcoming_fee": None, "user": UserSerializer(user).data})
 
     today = timezone.now().date()
-    upcoming = (
-        FeeLedger.objects.filter(student=user, hostel=booking.hostel, due_date__gte=today)
-        .order_by("due_date")
-        .first()
-    )
+    upcoming, _, _ = get_booking_fee_snapshot(booking, today)
 
     upcoming_payload = None
     if upcoming:
         upcoming_payload = {
             "month": upcoming.month,
-            "amount_due": str(upcoming.amount_due),
+            "amount_due": str(ledger_outstanding_amount(upcoming) if getattr(upcoming, "id", None) else upcoming.amount_due),
             "amount_paid": str(upcoming.amount_paid),
             "due_date": upcoming.due_date,
             "late_fee": str(upcoming.late_fee),
@@ -753,7 +770,21 @@ def owner_analytics(request):
     rooms = Room.objects.filter(hostel__owner=request.user)
     ledgers = FeeLedger.objects.filter(hostel__owner=request.user)
     today = timezone.now().date()
-
+    active_monthly_bookings = Booking.objects.filter(
+        hostel__owner=request.user,
+        status__in=[Booking.Status.APPROVED, Booking.Status.CHECKED_IN],
+        stay_type=Booking.StayType.MONTHLY,
+    ).select_related("room")
+    checkins_today = Booking.objects.filter(
+        hostel__owner=request.user,
+        status=Booking.Status.CHECKED_IN,
+        status_updated_at__date=today,
+    ).count()
+    checkouts_today = Booking.objects.filter(
+        hostel__owner=request.user,
+        status=Booking.Status.CHECKED_OUT,
+        status_updated_at__date=today,
+    ).count()
     total_beds = rooms.aggregate(total=models.Sum("total_beds"))["total"] or 0
     occupied_beds = rooms.aggregate(total=models.Sum("occupied_beds"))["total"] or 0
     total_due = ledgers.aggregate(total=models.Sum("amount_due"))["total"] or Decimal("0")
@@ -775,6 +806,28 @@ def owner_analytics(request):
             status__in=[FeeLedger.Status.PENDING, FeeLedger.Status.PARTIAL, FeeLedger.Status.OVERDUE],
         )
     )
+    monthly_revenue = sum(
+        Decimal(booking.room.monthly_rent or 0)
+        for booking in active_monthly_bookings
+        if booking.room
+    )
+    room_type_occupancy = []
+    for room_type, label in Room.RoomType.choices:
+        if room_type == Room.RoomType.SINGLE:
+            continue
+        type_rooms = rooms.filter(type=room_type)
+        total_type_beds = type_rooms.aggregate(total=models.Sum("total_beds"))["total"] or 0
+        occupied_type_beds = type_rooms.aggregate(total=models.Sum("occupied_beds"))["total"] or 0
+        if total_type_beds:
+            room_type_occupancy.append(
+                {
+                    "type": room_type,
+                    "label": label,
+                    "occupied_beds": occupied_type_beds,
+                    "total_beds": total_type_beds,
+                    "occupancy_rate": round((occupied_type_beds / total_type_beds) * 100, 1) if total_type_beds else 0,
+                }
+            )
 
     return Response(
         {
@@ -782,6 +835,12 @@ def owner_analytics(request):
             "occupancy_rate": round((occupied_beds / total_beds) * 100, 1) if total_beds else 0,
             "total_beds": total_beds,
             "occupied_beds": occupied_beds,
+            "active_guests_count": active_monthly_bookings.count(),
+            "monthly_revenue": str(monthly_revenue),
+            "expected_this_month": str(monthly_revenue),
+            "checkins_today": checkins_today,
+            "checkouts_today": checkouts_today,
+            "room_type_occupancy": room_type_occupancy,
             "fee_collected_till_date": str(total_paid),
             "fee_pending_or_overdue_amount": str(overdue_amount),
             "monthly_collected": str(monthly_collected),
@@ -805,34 +864,39 @@ def owner_defaulters(request):
         return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
 
     today = timezone.now().date()
-    ledgers = (
-        FeeLedger.objects.filter(hostel__owner=request.user)
-        .select_related("student", "hostel")
-        .filter(
-            due_date__lt=today,
-            status__in=[FeeLedger.Status.PENDING, FeeLedger.Status.PARTIAL, FeeLedger.Status.OVERDUE],
+    bookings = (
+        Booking.objects.filter(
+            hostel__owner=request.user,
+            status__in=[Booking.Status.APPROVED, Booking.Status.CHECKED_IN],
         )
-        .order_by("due_date")
+        .select_related("student", "hostel", "room")
+        .order_by("move_in_date", "created_at")
     )
 
     data = []
-    for ledger in ledgers:
-        outstanding = max(Decimal("0"), (ledger.amount_due + ledger.late_fee) - ledger.amount_paid)
-        days_overdue = max(0, (today - ledger.due_date).days)
+    for booking in bookings:
+        due_item, _, _ = get_booking_fee_snapshot(booking, today)
+        if not due_item or due_item.due_date > today:
+            continue
+        outstanding = ledger_outstanding_amount(due_item) if getattr(due_item, "id", None) else Decimal(due_item.amount_due)
+        if outstanding <= 0:
+            continue
+        days_overdue = max(0, (today - due_item.due_date).days)
         data.append(
             {
-                "ledger_id": ledger.id,
-                "student_id": ledger.student_id,
-                "student_name": ledger.student.name,
-                "student_phone": ledger.student.phone,
-                "hostel_name": ledger.hostel.name,
-                "month": ledger.month,
-                "due_date": ledger.due_date,
-                "status": ledger.status,
+                "ledger_id": getattr(due_item, "id", None),
+                "student_id": booking.student_id,
+                "student_name": booking.student.name,
+                "student_phone": booking.student.phone,
+                "hostel_name": booking.hostel.name,
+                "month": due_item.month,
+                "due_date": due_item.due_date,
+                "status": due_item.status,
                 "days_overdue": days_overdue,
                 "outstanding_amount": str(outstanding),
             }
         )
+    data.sort(key=lambda item: (item["due_date"], item["student_name"].lower()))
     return Response(data)
 
 

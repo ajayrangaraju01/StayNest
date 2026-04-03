@@ -391,7 +391,7 @@ export default function App() {
     }
     if (user?.role === "owner") {
       return [
-        { id: "owner", label: "Overview" },
+        { id: "owner", label: "Dashboard" },
         { id: "home", label: "Browse" },
       ];
     }
