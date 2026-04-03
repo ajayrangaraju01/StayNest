@@ -67,8 +67,10 @@ export default function HomePage({
       .join(" ")
       .toLowerCase();
     const matchesSearch =
-      !searchQuery ||
-      searchableText.includes(normalizedQuery);
+      !searchQuery
+      || (searchPoint
+        ? (hostel.exactDistanceKm != null || searchableText.includes(normalizedQuery))
+        : searchableText.includes(normalizedQuery));
 
     const matchesGender =
       genderFilter === "All" || hostel.gender === genderFilter || hostel.gender === "Co-Live";
