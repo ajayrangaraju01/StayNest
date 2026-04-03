@@ -213,10 +213,40 @@ export default function App() {
     }
     window.history.pushState(nextState, "");
     setShowMobileMenu(false);
-  }, [page, authRole, selectedHostelId, ownerInitialTab, adminInitialTab, studentInitialTab]);
+  }, [page, authRole, selectedHostelId]);
 
   useEffect(() => {
     const handlePopState = (event) => {
+      if (page === "owner" && ownerInitialTab !== "overview") {
+        const fallbackState = {
+          page: "owner",
+          authRole,
+          selectedHostelId,
+          ownerInitialTab: "overview",
+          adminInitialTab,
+          studentInitialTab,
+        };
+        setOwnerInitialTab("overview");
+        setShowMobileMenu(false);
+        window.history.pushState(fallbackState, "");
+        return;
+      }
+
+      if (page === "admin" && adminInitialTab !== "overview") {
+        const fallbackState = {
+          page: "admin",
+          authRole,
+          selectedHostelId,
+          ownerInitialTab,
+          adminInitialTab: "overview",
+          studentInitialTab,
+        };
+        setAdminInitialTab("overview");
+        setShowMobileMenu(false);
+        window.history.pushState(fallbackState, "");
+        return;
+      }
+
       const state = event.state;
       if (!state) {
         navigateTo("home", { selectedHostelId: null });
@@ -233,7 +263,7 @@ export default function App() {
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [page, authRole, selectedHostelId, ownerInitialTab, adminInitialTab, studentInitialTab]);
 
   useEffect(() => {
     if (!user) return;
