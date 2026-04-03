@@ -2,6 +2,8 @@ import random
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -10,13 +12,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
 
 from core.models import Hostel, HostelPhoto, Room
 from .models import EmailOTP, OwnerProfile, StudentProfile, User
 from .serializers import (
     OwnerProfileSerializer,
-    PhoneTokenObtainPairSerializer,
     StudentProfileSerializer,
     UserCreateSerializer,
     UserSerializer,
@@ -78,7 +78,11 @@ def send_email_otp(email, purpose):
         expires_at=now + timedelta(minutes=OTP_EXPIRY_MINUTES),
     )
 
-    otp_purpose = "registration" if purpose == "register" else "login"
+    otp_purpose = {
+        "register": "registration",
+        "login": "login",
+        "reset_password": "password reset",
+    }.get(purpose, "verification")
     send_mail(
         subject=f"StayNest {otp_purpose} OTP",
         message=f"Your StayNest OTP is {code}. It is valid for {OTP_EXPIRY_MINUTES} minutes.",
@@ -228,9 +232,26 @@ class RegisterView(APIView):
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
-class LoginView(TokenObtainPairView):
+class EmailPasswordLoginView(APIView):
     permission_classes = [permissions.AllowAny]
-    serializer_class = PhoneTokenObtainPairSerializer
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        password = request.data.get("password") or ""
+        role = request.data.get("role")
+
+        if not email or not password:
+            return Response({"detail": "Email and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = AuthUser.objects.filter(email__iexact=email).first()
+        if not user or not user.check_password(password):
+            return Response({"detail": "Invalid email or password."}, status=status.HTTP_400_BAD_REQUEST)
+        if role and user.role != role:
+            return Response({"detail": f"This account is registered as {user.role}."}, status=status.HTTP_400_BAD_REQUEST)
+        if user.status == User.Status.SUSPENDED:
+            return Response({"detail": "Your account is suspended. Contact support."}, status=status.HTTP_403_FORBIDDEN)
+
+        return Response(issue_tokens_for_user(user), status=status.HTTP_200_OK)
 
 
 class SendRegistrationOTPView(APIView):
@@ -263,6 +284,24 @@ class SendLoginOTPView(APIView):
         return send_email_otp(email, "login")
 
 
+class SendPasswordResetOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        role = request.data.get("role")
+        if not email:
+            return Response({"detail": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+        user = AuthUser.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"detail": "No account found for this email."}, status=status.HTTP_404_NOT_FOUND)
+        if role and user.role != role:
+            return Response({"detail": f"This account is registered as {user.role}."}, status=status.HTTP_400_BAD_REQUEST)
+        if user.status == User.Status.SUSPENDED:
+            return Response({"detail": "Your account is suspended. Contact support."}, status=status.HTTP_403_FORBIDDEN)
+        return send_email_otp(email, "reset_password")
+
+
 class OTPLoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -287,6 +326,49 @@ class OTPLoginView(APIView):
         otp_record.is_used = True
         otp_record.save(update_fields=["is_used"])
         return Response(issue_tokens_for_user(user), status=status.HTTP_200_OK)
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        otp_code = (request.data.get("otp_code") or "").strip()
+        new_password = request.data.get("new_password") or ""
+        role = request.data.get("role")
+
+        if not email or not otp_code or not new_password:
+            return Response(
+                {"detail": "Email, OTP, and new password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(new_password) < 6:
+            return Response(
+                {"detail": "Password must be at least 6 characters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = AuthUser.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"detail": "No account found for this email."}, status=status.HTTP_404_NOT_FOUND)
+        if role and user.role != role:
+            return Response({"detail": f"This account is registered as {user.role}."}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp_record, error_response = validate_otp_or_response(email, otp_code, "reset_password")
+        if error_response:
+            return error_response
+
+        try:
+            validate_password(new_password, user=user)
+        except ValidationError as exc:
+            return Response({"detail": " ".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        otp_record.is_used = True
+        otp_record.save(update_fields=["is_used"])
+
+        return Response({"detail": "Password updated successfully."}, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])

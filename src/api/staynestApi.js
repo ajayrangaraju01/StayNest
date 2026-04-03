@@ -207,12 +207,20 @@ export function authSendLoginOtp(payload) {
   return apiPost("/auth/send-login-otp/", payload);
 }
 
+export function authSendPasswordResetOtp(payload) {
+  return apiPost("/auth/send-password-reset-otp/", payload);
+}
+
 export function authLoginOtp(payload) {
   return apiPost("/auth/login-otp/", payload);
 }
 
 export function authLogin(payload) {
   return apiPost("/auth/login/", payload);
+}
+
+export function authResetPassword(payload) {
+  return apiPost("/auth/reset-password/", payload);
 }
 
 export function authRefresh(payload) {

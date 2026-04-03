@@ -4,7 +4,9 @@ import {
   authMe,
   authRegister,
   authSendLoginOtp,
+  authSendPasswordResetOtp,
   authSendRegistrationOtp,
+  authResetPassword,
 } from "../api/staynestApi";
 
 const SESSION_KEY = "staynest_session";
@@ -94,6 +96,20 @@ export async function sendLoginOtp(email, role) {
   }
 }
 
+export async function sendPasswordResetOtp(email, role) {
+  const normalizedEmail = `${email || ""}`.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+
+  try {
+    await authSendPasswordResetOtp({ email: normalizedEmail, role: role === "guest" ? "student" : role });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to send password reset OTP." };
+  }
+}
+
 export async function signUp({ name, phone, email, otpCode, password, role, hostel }) {
   const normalizedPhone = normalizePhone(phone);
   const normalizedEmail = `${email || ""}`.trim().toLowerCase();
@@ -123,8 +139,8 @@ export async function signUp({ name, phone, email, otpCode, password, role, host
     if (hostel && apiRole === "owner") {
       payload.hostel = hostel;
     }
-    const user = await authRegister(payload);
-    const tokens = await authLogin({ phone: normalizedPhone, password });
+    await authRegister(payload);
+    const tokens = await authLogin({ email: normalizedEmail, password, role: apiRole });
     saveTokens(tokens);
     const session = toSession(await authMe());
     saveSession(session);
@@ -134,7 +150,35 @@ export async function signUp({ name, phone, email, otpCode, password, role, host
   }
 }
 
-export async function signIn({ email, otpCode, role }) {
+export async function signIn({ email, password, role }) {
+  const normalizedEmail = `${email || ""}`.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+  if (!password || password.length < 6) {
+    return { ok: false, error: "Enter your password." };
+  }
+
+  try {
+    const apiRole = role === "guest" ? "student" : role;
+    const tokens = await authLogin({ email: normalizedEmail, password, role: apiRole });
+    saveTokens(tokens);
+    const user = await authMe();
+    if (role && user.role !== apiRole) {
+      return { ok: false, error: `This account is registered as ${user.role}.` };
+    }
+    if (user.status === "suspended") {
+      return { ok: false, error: "Your account is suspended. Contact support." };
+    }
+    const session = toSession(user);
+    saveSession(session);
+    return { ok: true, session };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to login." };
+  }
+}
+
+export async function signInWithOtp({ email, otpCode, role }) {
   const normalizedEmail = `${email || ""}`.trim().toLowerCase();
   if (!normalizedEmail) {
     return { ok: false, error: "Enter a valid email address." };
@@ -158,7 +202,32 @@ export async function signIn({ email, otpCode, role }) {
     saveSession(session);
     return { ok: true, session };
   } catch (error) {
-    return { ok: false, error: error.message || "Unable to login." };
+    return { ok: false, error: error.message || "Unable to login with OTP." };
+  }
+}
+
+export async function resetPassword({ email, otpCode, password, role }) {
+  const normalizedEmail = `${email || ""}`.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+  if (!otpCode || `${otpCode}`.trim().length !== 6) {
+    return { ok: false, error: "Enter the 6-digit email OTP." };
+  }
+  if (!password || password.length < 6) {
+    return { ok: false, error: "Password must be at least 6 characters." };
+  }
+
+  try {
+    await authResetPassword({
+      email: normalizedEmail,
+      otp_code: `${otpCode}`.trim(),
+      new_password: password,
+      role: role === "guest" ? "student" : role,
+    });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || "Unable to reset password." };
   }
 }
 

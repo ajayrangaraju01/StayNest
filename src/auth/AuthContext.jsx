@@ -1,6 +1,16 @@
 
 import { useMemo, useState } from "react";
-import { getSession, sendLoginOtp, sendRegistrationOtp, signIn, signOut, signUp } from "./authService";
+import {
+  getSession,
+  resetPassword,
+  sendLoginOtp,
+  sendPasswordResetOtp,
+  sendRegistrationOtp,
+  signIn,
+  signInWithOtp,
+  signOut,
+  signUp,
+} from "./authService";
 import AuthContext from "./context";
 
 export function AuthProvider({ children }) {
@@ -20,8 +30,15 @@ export function AuthProvider({ children }) {
         if (result.ok) setUser(result.session);
         return result;
       },
+      loginWithOtp: async (payload) => {
+        const result = await signInWithOtp(payload);
+        if (result.ok) setUser(result.session);
+        return result;
+      },
       sendLoginOtp,
+      sendPasswordResetOtp,
       sendRegistrationOtp,
+      resetPassword,
       logout: () => {
         signOut();
         setUser(null);

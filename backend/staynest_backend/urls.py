@@ -19,11 +19,13 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from accounts.views import (
-    LoginView,
+    EmailPasswordLoginView,
     OTPLoginView,
     RegisterView,
     SendLoginOTPView,
+    SendPasswordResetOTPView,
     SendRegistrationOTPView,
+    ResetPasswordView,
     UserViewSet,
     admin_all_owners,
     admin_overview,
@@ -88,8 +90,10 @@ urlpatterns = [
     path('api/auth/send-registration-otp/', SendRegistrationOTPView.as_view()),
     path('api/auth/send-login-otp/', SendLoginOTPView.as_view()),
     path('api/auth/login-otp/', OTPLoginView.as_view()),
-    path('api/auth/login/', LoginView.as_view()),
+    path('api/auth/login/', EmailPasswordLoginView.as_view()),
     path('api/auth/refresh/', TokenRefreshView.as_view()),
+    path('api/auth/send-password-reset-otp/', SendPasswordResetOTPView.as_view()),
+    path('api/auth/reset-password/', ResetPasswordView.as_view()),
     path('api/auth/me/', me_view),
     path('api/auth/me/update/', update_my_profile),
     path('api/admin/overview/', admin_overview),

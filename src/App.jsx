@@ -35,6 +35,7 @@ function formatNotificationTime(value) {
 
 export default function App() {
   const { user, logout } = useAuth();
+  const isHandlingPopState = useRef(false);
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem("staynest_last_page");
     return saved || "home";
@@ -51,7 +52,15 @@ export default function App() {
   const [ownerInitialTab, setOwnerInitialTab] = useState("overview");
   const [adminInitialTab, setAdminInitialTab] = useState("overview");
   const [studentInitialTab, setStudentInitialTab] = useState("overview");
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const bellRef = useRef(null);
+
+  const navigateTo = (nextPage, options = {}) => {
+    if (options.selectedHostelId !== undefined) {
+      setSelectedHostelId(options.selectedHostelId);
+    }
+    setPage(nextPage);
+  };
 
   const refreshHostels = async () => {
     setLoadingHostels(true);
@@ -161,6 +170,42 @@ export default function App() {
   }, [page]);
 
   useEffect(() => {
+    window.history.replaceState({
+      page,
+      authRole,
+      selectedHostelId,
+    }, "");
+  }, []);
+
+  useEffect(() => {
+    const nextState = { page, authRole, selectedHostelId };
+    if (isHandlingPopState.current) {
+      isHandlingPopState.current = false;
+      window.history.replaceState(nextState, "");
+      return;
+    }
+    window.history.pushState(nextState, "");
+    setShowMobileMenu(false);
+  }, [page, authRole, selectedHostelId]);
+
+  useEffect(() => {
+    const handlePopState = (event) => {
+      const state = event.state;
+      if (!state) {
+        navigateTo("home", { selectedHostelId: null });
+        return;
+      }
+      isHandlingPopState.current = true;
+      setAuthRole(state.authRole || "guest");
+      setSelectedHostelId(state.selectedHostelId ?? null);
+      setPage(state.page || "home");
+      setShowMobileMenu(false);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
     const intervalId = window.setInterval(() => {
       refreshNotifications();
@@ -170,7 +215,7 @@ export default function App() {
 
   const openAuth = (role) => {
     setAuthRole(role);
-    setPage("auth");
+    navigateTo("auth");
   };
 
   const seenKey = getNotificationSeenKey();
@@ -191,24 +236,24 @@ export default function App() {
   const handleAuthSuccess = (session) => {
     if (session.role === "owner" && session.status === "pending") {
       showToast("Owner account created. Verification pending admin approval.");
-      setPage("owner");
+      navigateTo("owner");
       return;
     }
 
     showToast(`Welcome, ${session.name}!`);
     if (session.role === "owner") {
-      setPage("owner");
+      navigateTo("owner");
       return;
     }
     if (session.role === "admin") {
-      setPage("admin");
+      navigateTo("admin");
       return;
     }
     if (session.role === "guest") {
-      setPage("student");
+      navigateTo("student");
       return;
     }
-    setPage("home");
+    navigateTo("home");
   };
 
 
@@ -304,7 +349,7 @@ export default function App() {
       openAuth("owner");
       return;
     }
-    setPage(itemId);
+    navigateTo(itemId);
   };
 
   const handleNotificationClick = (note) => {
@@ -314,7 +359,7 @@ export default function App() {
     }
 
     if (user?.role === "owner") {
-      setPage("owner");
+      navigateTo("owner");
       if (note.type === "booking_request") setOwnerInitialTab("enquiries");
       else if (note.type === "leave_request") setOwnerInitialTab("leaves");
       else if (note.type === "review_submitted") setOwnerInitialTab("reviews");
@@ -323,7 +368,7 @@ export default function App() {
     }
 
     if (user?.role === "guest") {
-      setPage("student");
+      navigateTo("student");
       if (note.type === "complaint_created" || note.type === "complaint_status") setStudentInitialTab("complaints");
       else if (note.type === "booking_status" || note.type === "walkin_checkin") setStudentInitialTab("overview");
       else setStudentInitialTab("overview");
@@ -331,15 +376,75 @@ export default function App() {
     }
 
     if (user?.role === "admin") {
-      setPage("admin");
+      navigateTo("admin");
       if ((note.type || "").includes("complaint")) setAdminInitialTab("complaints");
       else if ((note.type || "").includes("review")) setAdminInitialTab("reviews");
       else setAdminInitialTab("overview");
     }
   };
 
+  const mobileMenuItems = useMemo(() => {
+    if (!user) {
+      return [
+        { id: "home", label: "Browse Hostels", action: () => navigateTo("home", { selectedHostelId: null }) },
+        { id: "auth-guest", label: "Guest Login", action: () => openAuth("guest") },
+        { id: "auth-owner", label: "Owner Login", action: () => openAuth("owner") },
+        { id: "admin", label: "Admin Login", action: () => navigateTo("admin") },
+      ];
+    }
+
+    const items = [{ id: "home", label: "Browse Hostels", action: () => navigateTo("home", { selectedHostelId: null }) }];
+    if (user.role === "guest") items.push({ id: "student", label: "My Stay", action: () => navigateTo("student") });
+    if (user.role === "owner") items.push({ id: "owner", label: "Owner Dashboard", action: () => navigateTo("owner") });
+    if (user.role === "admin") items.push({ id: "admin", label: "Admin Dashboard", action: () => navigateTo("admin") });
+    items.push({
+      id: "logout",
+      label: "Logout",
+      action: () => {
+        logout();
+        showToast("Logged out successfully.");
+        navigateTo("home", { selectedHostelId: null });
+      },
+    });
+    return items;
+  }, [user]);
+
+  const mobileTitle = useMemo(() => {
+    if (page === "detail" && selectedHostel) return selectedHostel.name;
+    if (page === "student") return "My Stay";
+    if (page === "owner") return "Owner Dashboard";
+    if (page === "admin") return "Admin Dashboard";
+    if (page === "auth") {
+      if (authRole === "owner") return "Owner Access";
+      if (authRole === "admin") return "Admin Access";
+      return "Guest Access";
+    }
+    return "Browse Hostels";
+  }, [page, selectedHostel, authRole]);
+
   return (
-    <div className={`app${mobileNavItems.length ? " app-mobile-shell" : ""}`}>
+    <div className="app app-mobile-shell">
+      <div className="mobile-topbar">
+        <button
+          className="mobile-topbar-brand"
+          type="button"
+          onClick={() => navigateTo("home", { selectedHostelId: null })}
+        >
+          Stay<span>Nest</span>
+        </button>
+        <div className="mobile-topbar-title">{mobileTitle}</div>
+        <div className="mobile-topbar-actions">
+          {user && (
+            <button className="mobile-icon-btn" type="button" onClick={handleNotificationToggle} aria-label="Open notifications">
+              Updates
+              {unreadCount > 0 && <span className="notification-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+            </button>
+          )}
+          <button className="mobile-icon-btn" type="button" onClick={() => setShowMobileMenu(true)} aria-label="Open menu">
+            Menu
+          </button>
+        </div>
+      </div>
       {user && (
         <div className="notification-shell" ref={bellRef}>
           <button className="notification-bell" onClick={handleNotificationToggle} aria-label="Open notifications">
@@ -377,20 +482,45 @@ export default function App() {
         </div>
       )}
 
+      {showMobileMenu && (
+        <div className="mobile-menu-backdrop" onClick={() => setShowMobileMenu(false)}>
+          <div className="mobile-menu-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="mobile-menu-header">
+              <strong>{user?.name || "StayNest"}</strong>
+              <button className="back-btn" type="button" onClick={() => setShowMobileMenu(false)}>
+                Close
+              </button>
+            </div>
+            <div className="mobile-menu-list">
+              {mobileMenuItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="mobile-menu-item"
+                  onClick={item.action}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {page !== "owner" && page !== "admin" && (
         <nav className="nav">
-          <div className="nav-logo" onClick={() => setPage("home")}>
+          <div className="nav-logo" onClick={() => navigateTo("home", { selectedHostelId: null })}>
             Stay
             <span>Nest</span>
           </div>
           <div className="nav-links">
             {user?.role !== "owner" && (
-              <button className="nav-btn" onClick={() => setPage("home")}>
+              <button className="nav-btn" onClick={() => navigateTo("home", { selectedHostelId: null })}>
                 Browse Hostels
               </button>
             )}
             {user?.role === "admin" && (
-              <button className="nav-btn" onClick={() => setPage("admin")}>
+              <button className="nav-btn" onClick={() => navigateTo("admin")}>
                 Admin Dashboard
               </button>
             )}
@@ -398,7 +528,7 @@ export default function App() {
               className="nav-btn"
               onClick={() => {
                 if (user?.role === "guest") {
-                  setPage("student");
+                  navigateTo("student");
                   return;
                 }
                 openAuth("guest");
@@ -410,7 +540,7 @@ export default function App() {
               className="nav-btn"
               onClick={() => {
                 if (user?.role === "owner") {
-                  setPage("owner");
+                  navigateTo("owner");
                   return;
                 }
                 openAuth("owner");
@@ -422,10 +552,10 @@ export default function App() {
               className="nav-btn"
               onClick={() => {
                 if (user?.role === "admin") {
-                  setPage("admin");
+                  navigateTo("admin");
                   return;
                 }
-                setPage("admin");
+                navigateTo("admin");
               }}
             >
               {user?.role === "admin" ? "Admin Dashboard" : "Admin Login"}
@@ -436,7 +566,7 @@ export default function App() {
                 onClick={() => {
                   logout();
                   showToast("Logged out successfully.");
-                  setPage("home");
+                  navigateTo("home", { selectedHostelId: null });
                 }}
               >
                 Logout
@@ -455,8 +585,7 @@ export default function App() {
           hostels={publicHostels}
           onSearch={() => {}}
           onHostelClick={(hostel) => {
-            setSelectedHostelId(hostel.id);
-            setPage("detail");
+            navigateTo("detail", { selectedHostelId: hostel.id });
           }}
           onOwnerClick={() => openAuth("owner")}
           isLoading={loadingHostels}
@@ -467,7 +596,7 @@ export default function App() {
         <HostelDetail
           hostel={selectedHostel}
           user={user}
-          onBack={() => setPage(user?.role === "guest" ? "student" : "home")}
+          onBack={() => navigateTo(user?.role === "guest" ? "student" : "home")}
           onToast={showToast}
           onRequireStudentLogin={() => openAuth("guest")}
           onBookingRequest={handleBookingRequest}
@@ -481,8 +610,7 @@ export default function App() {
           requests={studentRequests}
           onToast={showToast}
           onHostelClick={(hostel) => {
-            setSelectedHostelId(hostel.id);
-            setPage("detail");
+            navigateTo("detail", { selectedHostelId: hostel.id });
           }}
         />
       )}
@@ -497,12 +625,12 @@ export default function App() {
           hostels={ownerHostels}
           requests={ownerRequests}
           onRequestStatusChange={handleOwnerRequestAction}
-          onBack={() => setPage("home")}
+          onBack={() => navigateTo("home")}
           onToast={showToast}
           onRefreshHostels={refreshHostels}
           onLogout={() => {
             logout();
-            setPage("home");
+            navigateTo("home", { selectedHostelId: null });
             showToast("Owner logged out.");
           }}
         />
@@ -515,7 +643,7 @@ export default function App() {
           onToast={showToast}
           onLogout={() => {
             logout();
-            setPage("home");
+            navigateTo("home", { selectedHostelId: null });
             showToast("Admin logged out.");
           }}
         />
@@ -525,7 +653,7 @@ export default function App() {
         <AuthPage
           defaultRole="owner"
           lockRole
-          onBack={() => setPage("home")}
+          onBack={() => navigateTo("home")}
           onSuccess={handleAuthSuccess}
         />
       )}
@@ -534,7 +662,7 @@ export default function App() {
         <AuthPage
           defaultRole="admin"
           lockRole
-          onBack={() => setPage("home")}
+          onBack={() => navigateTo("home")}
           onSuccess={handleAuthSuccess}
         />
       )}
@@ -543,28 +671,13 @@ export default function App() {
         <AuthPage
           defaultRole={authRole}
           hideOwner={authRole === "guest"}
-          onBack={() => setPage("home")}
+          onBack={() => navigateTo("home")}
           onSuccess={handleAuthSuccess}
         />
       )}
 
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
 
-      <div className="mobile-bottom-nav">
-        {mobileNavItems.map((item) => (
-          <button
-            key={item.id}
-            className={`mobile-bottom-nav-item${
-              (item.id === page || (item.id === "auth-guest" && page === "auth" && authRole === "guest") || (item.id === "auth-owner" && page === "auth" && authRole === "owner"))
-                ? " active"
-                : ""
-            }`}
-            onClick={() => handleMobileNav(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

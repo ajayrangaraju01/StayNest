@@ -17,8 +17,18 @@ export default function AuthPage({
   hideOwner = false,
   lockRole = false,
 }) {
-  const { login, register, sendLoginOtp, sendRegistrationOtp } = useAuth();
+  const {
+    login,
+    loginWithOtp,
+    register,
+    resetPassword,
+    sendLoginOtp,
+    sendPasswordResetOtp,
+    sendRegistrationOtp,
+  } = useAuth();
   const [mode, setMode] = useState("login");
+  const [showRecoveryOptions, setShowRecoveryOptions] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState("");
   const [role, setRole] = useState(defaultRole);
   const [form, setForm] = useState({
     name: "",
@@ -26,6 +36,7 @@ export default function AuthPage({
     email: "",
     otpCode: "",
     password: "",
+    confirmPassword: "",
     hostelName: "",
     hostelArea: "",
     hostelCity: "Hyderabad",
@@ -37,6 +48,7 @@ export default function AuthPage({
     hostelGeoLng: "",
   });
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
@@ -58,13 +70,22 @@ export default function AuthPage({
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+    setInfo("");
 
-    if (mode === "signup" && (!form.phone || !form.password || !form.name.trim())) {
+    if (mode === "signup" && (!form.phone || !form.password || !form.confirmPassword || !form.name.trim())) {
       setError("Please fill all required fields.");
       return;
     }
-    if (mode === "login" && !form.email) {
+    if ((mode === "login" || recoveryMode) && !form.email) {
       setError("Please enter your email address.");
+      return;
+    }
+    if (mode === "login" && !form.password) {
+      setError("Please enter your password.");
+      return;
+    }
+    if ((mode === "signup" || recoveryMode === "reset") && form.password !== form.confirmPassword) {
+      setError("Password and confirm password must match.");
       return;
     }
 
@@ -100,11 +121,27 @@ export default function AuthPage({
     }
 
     setBusy(true);
-    const result = mode === "login" ? await login(payload) : await register(payload);
+    const result = recoveryMode === "otp-login"
+      ? await loginWithOtp(payload)
+      : recoveryMode === "reset"
+        ? await resetPassword(payload)
+        : mode === "login"
+          ? await login(payload)
+          : await register(payload);
     setBusy(false);
 
     if (!result.ok) {
       setError(result.error);
+      return;
+    }
+
+    if (recoveryMode === "reset") {
+      setRecoveryMode("");
+      setShowRecoveryOptions(false);
+      setMode("login");
+      setForm((prev) => ({ ...prev, otpCode: "", password: "", confirmPassword: "" }));
+      setOtpSent(false);
+      setInfo("Password changed successfully. Please login with your new password.");
       return;
     }
 
@@ -113,10 +150,13 @@ export default function AuthPage({
 
   const handleSendOtp = async () => {
     setError("");
+    setInfo("");
     setOtpBusy(true);
-    const result = mode === "login"
+    const result = recoveryMode === "otp-login"
       ? await sendLoginOtp(form.email, role)
-      : await sendRegistrationOtp(form.email);
+      : recoveryMode === "reset"
+        ? await sendPasswordResetOtp(form.email, role)
+        : await sendRegistrationOtp(form.email);
     setOtpBusy(false);
 
     if (!result.ok) {
@@ -242,14 +282,28 @@ export default function AuthPage({
           <div className="auth-toggle-row">
             <button
               className={`filter-chip${mode === "login" ? " active" : ""}`}
-              onClick={() => setMode("login")}
+              onClick={() => {
+                setMode("login");
+                setShowRecoveryOptions(false);
+                setRecoveryMode("");
+                setOtpSent(false);
+                setError("");
+                setInfo("");
+              }}
               type="button"
             >
               Login
             </button>
             <button
               className={`filter-chip${mode === "signup" ? " active" : ""}`}
-              onClick={() => setMode("signup")}
+              onClick={() => {
+                setMode("signup");
+                setShowRecoveryOptions(false);
+                setRecoveryMode("");
+                setOtpSent(false);
+                setError("");
+                setInfo("");
+              }}
               type="button"
             >
               Sign Up
@@ -336,44 +390,171 @@ export default function AuthPage({
                 />
               </div>
 
-              <div className="auth-otp-row">
-                <input
-                  className="form-input"
-                  value={form.otpCode}
-                  onChange={(event) => setForm({ ...form, otpCode: event.target.value })}
-                  placeholder="Enter 6-digit login OTP"
-                  inputMode="numeric"
-                  maxLength={6}
-                />
-                <button
-                  className="nav-btn auth-otp-btn"
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={otpBusy}
-                >
-                  {otpBusy ? "Sending..." : "Send OTP"}
-                </button>
-              </div>
+              {!recoveryMode && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Password</label>
+                    <input
+                      className="form-input"
+                      type="password"
+                      value={form.password}
+                      onChange={(event) => setForm({ ...form, password: event.target.value })}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <button
+                    className="auth-link-btn"
+                    type="button"
+                    onClick={() => {
+                      setShowRecoveryOptions((prev) => !prev);
+                      setRecoveryMode("");
+                      setOtpSent(false);
+                      setError("");
+                      setInfo("");
+                    }}
+                  >
+                    Forgot Password?
+                  </button>
+                </>
+              )}
 
-              {otpSent && (
-                <div className="auth-info">
-                  Login OTP sent to your email. Use the latest code only.
+              {!!recoveryMode && (
+                <div className="auth-info" style={{ marginBottom: 12 }}>
+                  {recoveryMode === "otp-login"
+                    ? "Use OTP once if you forgot your password and just want to sign in."
+                    : "Verify with OTP and set a new password for future logins."}
                 </div>
+              )}
+
+              {!!recoveryMode && (
+                <div className="auth-otp-row">
+                  <input
+                    className="form-input"
+                    value={form.otpCode}
+                    onChange={(event) => setForm({ ...form, otpCode: event.target.value })}
+                    placeholder="Enter 6-digit email OTP"
+                    inputMode="numeric"
+                    maxLength={6}
+                  />
+                  <button
+                    className="nav-btn auth-otp-btn"
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={otpBusy}
+                  >
+                    {otpBusy ? "Sending..." : "Send OTP"}
+                  </button>
+                </div>
+              )}
+
+              {recoveryMode === "reset" && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">New Password</label>
+                    <input
+                      className="form-input"
+                      type="password"
+                      value={form.password}
+                      onChange={(event) => setForm({ ...form, password: event.target.value })}
+                      placeholder="Set a new password"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Confirm New Password</label>
+                    <input
+                      className="form-input"
+                      type="password"
+                      value={form.confirmPassword}
+                      onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
+                      placeholder="Enter the new password again"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </>
+              )}
+
+              {otpSent && recoveryMode && (
+                <div className="auth-info">
+                  {recoveryMode === "otp-login"
+                    ? "Login OTP sent to your email. Use the latest code only."
+                    : "Password reset OTP sent to your email. Use the latest code only."}
+                </div>
+              )}
+
+              {showRecoveryOptions && !recoveryMode && (
+                <div className="auth-recovery-box">
+                  <div className="auth-recovery-title">Choose how you want to recover access</div>
+                  <div className="auth-toggle-row" style={{ justifyContent: "space-between", gap: 10, marginBottom: 0 }}>
+                    <button
+                      className="filter-chip"
+                      type="button"
+                      onClick={() => {
+                        setRecoveryMode("otp-login");
+                        setOtpSent(false);
+                        setError("");
+                        setInfo("");
+                      }}
+                    >
+                      Login with OTP
+                    </button>
+                    <button
+                      className="filter-chip"
+                      type="button"
+                      onClick={() => {
+                        setRecoveryMode("reset");
+                        setOtpSent(false);
+                        setError("");
+                        setInfo("");
+                      }}
+                    >
+                      Reset Password
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!!recoveryMode && (
+                <button
+                  className="auth-link-btn"
+                  type="button"
+                  onClick={() => {
+                    setRecoveryMode("");
+                    setOtpSent(false);
+                    setError("");
+                    setInfo("");
+                  }}
+                >
+                  Back to recovery options
+                </button>
               )}
             </>
           )}
 
           {mode === "signup" && (
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <input
-                className="form-input"
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm({ ...form, password: event.target.value })}
-                placeholder="Minimum 6 characters"
-              />
-            </div>
+            <>
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => setForm({ ...form, password: event.target.value })}
+                  placeholder="Minimum 6 characters"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Confirm Password</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  value={form.confirmPassword}
+                  onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
+                  placeholder="Enter the password again"
+                />
+              </div>
+            </>
           )}
 
           {mode === "signup" && role === "owner" && (
@@ -479,10 +660,19 @@ export default function AuthPage({
             </>
           )}
 
+          {info && <div className="auth-info">{info}</div>}
           {error && <div className="auth-error">{error}</div>}
 
           <button className="book-now-btn" type="submit" disabled={busy}>
-            {busy ? "Please wait..." : mode === "login" ? "Login with OTP" : "Create Account"}
+            {busy
+              ? "Please wait..."
+              : recoveryMode === "otp-login"
+                ? "Login with OTP"
+                : recoveryMode === "reset"
+                  ? "Change Password"
+                  : mode === "login"
+                    ? "Login"
+                    : "Create Account"}
           </button>
         </form>
       </div>
