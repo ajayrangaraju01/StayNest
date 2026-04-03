@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   fetchAdminAllHostels,
   fetchAdminAllOwners,
@@ -24,7 +24,6 @@ const sidebarItems = [
 
 export default function AdminDashboard({ adminName, onLogout, onToast, initialTab = "overview", onTabChange }) {
   const [activeTab, setActiveTab] = useState(initialTab);
-  const lastReportedTabRef = useRef(initialTab);
   const [overview, setOverview] = useState(null);
   const [owners, setOwners] = useState([]);
   const [allOwners, setAllOwners] = useState([]);
@@ -71,16 +70,13 @@ export default function AdminDashboard({ adminName, onLogout, onToast, initialTa
 
   useEffect(() => {
     const nextTab = initialTab || "overview";
-    if (nextTab !== activeTab) {
-      setActiveTab(nextTab);
-    }
-  }, [initialTab, activeTab]);
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [initialTab]);
 
-  useEffect(() => {
-    if (lastReportedTabRef.current === activeTab) return;
-    lastReportedTabRef.current = activeTab;
-    onTabChange?.(activeTab);
-  }, [activeTab, onTabChange]);
+  const selectTab = (tab) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   const handleOwnerAction = async (userId, payload, successMessage) => {
     const actionLabel = payload.verification_state || payload.status || "update";
@@ -165,7 +161,7 @@ export default function AdminDashboard({ adminName, onLogout, onToast, initialTa
           <div
             key={item.id}
             className={`sidebar-item${activeTab === item.id ? " active" : ""}`}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => selectTab(item.id)}
           >
             {item.label}
           </div>
@@ -184,10 +180,10 @@ export default function AdminDashboard({ adminName, onLogout, onToast, initialTa
 
         <div className="mobile-quick-grid">
           {[
-            { label: "Owners", value: owners.length, onClick: () => setActiveTab("owners") },
-            { label: "Hostels", value: hostels.length, onClick: () => setActiveTab("hostels") },
-            { label: "Complaints", value: complaints.filter((item) => item.status !== "resolved" && item.status !== "rejected").length, onClick: () => setActiveTab("complaints") },
-            { label: "Reviews", value: reviews.filter((item) => item.status === "pending").length, onClick: () => setActiveTab("reviews") },
+            { label: "Owners", value: owners.length, onClick: () => selectTab("owners") },
+            { label: "Hostels", value: hostels.length, onClick: () => selectTab("hostels") },
+            { label: "Complaints", value: complaints.filter((item) => item.status !== "resolved" && item.status !== "rejected").length, onClick: () => selectTab("complaints") },
+            { label: "Reviews", value: reviews.filter((item) => item.status === "pending").length, onClick: () => selectTab("reviews") },
           ].map((item) => (
             <button key={item.label} className="mobile-quick-card" onClick={item.onClick}>
               <span className="mobile-quick-label">{item.label}</span>

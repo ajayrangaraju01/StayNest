@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MapPickerModal from "../components/MapPickerModal";
 import {
   createComplaint,
@@ -144,7 +144,6 @@ export default function OwnerDashboard({
     collegeCompany: "",
     emergencyContact: "",
   });
-  const lastReportedTabRef = useRef(initialTab);
 
   const summarizeHostelRooms = (hostel) =>
     (hostel?.rooms || []).reduce((acc, room) => {
@@ -213,16 +212,13 @@ export default function OwnerDashboard({
 
   useEffect(() => {
     const nextTab = initialTab || "overview";
-    if (nextTab !== activeTab) {
-      setActiveTab(nextTab);
-    }
-  }, [initialTab, activeTab]);
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [initialTab]);
 
-  useEffect(() => {
-    if (lastReportedTabRef.current === activeTab) return;
-    lastReportedTabRef.current = activeTab;
-    onTabChange?.(activeTab);
-  }, [activeTab, onTabChange]);
+  const selectTab = (tab) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   const calculatedRoomTotals = useMemo(() => {
     if (!editForm?.floorRoomCounts?.length) return {};
@@ -1076,7 +1072,7 @@ export default function OwnerDashboard({
           <div
             key={item.id}
             className={`sidebar-item${activeTab === item.id ? " active" : ""}`}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => selectTab(item.id)}
           >
             {item.label}
           </div>
@@ -1123,7 +1119,7 @@ export default function OwnerDashboard({
                   <div key={item.title} className="workflow-card">
                     <div className="workflow-card-title">{item.title}</div>
                     <p className="workflow-card-desc">{item.desc}</p>
-                    <button className="card-cta" onClick={() => setActiveTab(item.tab)}>
+                    <button className="card-cta" onClick={() => selectTab(item.tab)}>
                       {item.cta}
                     </button>
                   </div>
