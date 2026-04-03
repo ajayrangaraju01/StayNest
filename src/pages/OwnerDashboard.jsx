@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MapPickerModal from "../components/MapPickerModal";
 import {
   createComplaint,
@@ -144,6 +144,7 @@ export default function OwnerDashboard({
     collegeCompany: "",
     emergencyContact: "",
   });
+  const lastReportedTabRef = useRef(initialTab);
 
   const summarizeHostelRooms = (hostel) =>
     (hostel?.rooms || []).reduce((acc, room) => {
@@ -211,6 +212,15 @@ export default function OwnerDashboard({
   }, [activeTab, selectedHostelId]);
 
   useEffect(() => {
+    const nextTab = initialTab || "overview";
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [initialTab, activeTab]);
+
+  useEffect(() => {
+    if (lastReportedTabRef.current === activeTab) return;
+    lastReportedTabRef.current = activeTab;
     onTabChange?.(activeTab);
   }, [activeTab, onTabChange]);
 
@@ -683,10 +693,6 @@ export default function OwnerDashboard({
       setSelectedHostelId(hostels[0].id);
     }
   }, [hostels, selectedHostelId]);
-
-  useEffect(() => {
-    setActiveTab(initialTab || "overview");
-  }, [initialTab]);
 
   useEffect(() => {
     const defaultHostelId = hostels[0]?.id ? String(hostels[0].id) : "";

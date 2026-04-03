@@ -213,7 +213,7 @@ export default function App() {
     }
     window.history.pushState(nextState, "");
     setShowMobileMenu(false);
-  }, [page, authRole, selectedHostelId]);
+  }, [page, authRole, selectedHostelId, ownerInitialTab, adminInitialTab, studentInitialTab]);
 
   useEffect(() => {
     const handlePopState = (event) => {
@@ -249,11 +249,11 @@ export default function App() {
   };
 
   const handleOwnerTabChange = (tab) => {
-    setOwnerInitialTab(tab || "overview");
+    setOwnerInitialTab((current) => (current === (tab || "overview") ? current : (tab || "overview")));
   };
 
   const handleAdminTabChange = (tab) => {
-    setAdminInitialTab(tab || "overview");
+    setAdminInitialTab((current) => (current === (tab || "overview") ? current : (tab || "overview")));
   };
 
   const seenKey = getNotificationSeenKey();

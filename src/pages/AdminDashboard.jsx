@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchAdminAllHostels,
   fetchAdminAllOwners,
@@ -24,6 +24,7 @@ const sidebarItems = [
 
 export default function AdminDashboard({ adminName, onLogout, onToast, initialTab = "overview", onTabChange }) {
   const [activeTab, setActiveTab] = useState(initialTab);
+  const lastReportedTabRef = useRef(initialTab);
   const [overview, setOverview] = useState(null);
   const [owners, setOwners] = useState([]);
   const [allOwners, setAllOwners] = useState([]);
@@ -69,10 +70,15 @@ export default function AdminDashboard({ adminName, onLogout, onToast, initialTa
   }, []);
 
   useEffect(() => {
-    setActiveTab(initialTab || "overview");
-  }, [initialTab]);
+    const nextTab = initialTab || "overview";
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [initialTab, activeTab]);
 
   useEffect(() => {
+    if (lastReportedTabRef.current === activeTab) return;
+    lastReportedTabRef.current = activeTab;
     onTabChange?.(activeTab);
   }, [activeTab, onTabChange]);
 
