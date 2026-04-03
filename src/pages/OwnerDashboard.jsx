@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import MapPickerModal from "../components/MapPickerModal";
 import {
   createComplaint,
   createFeeLedger,
@@ -23,7 +24,7 @@ import {
   updateReview,
 } from "../api/staynestApi";
 import { createRoomDetails, updateHostelDetails, updateRoomDetails } from "../data/appStore";
-import { geocodeAddress } from "../utils/googleMaps";
+import { geocodeAddress, reverseGeocodeLatLng } from "../utils/googleMaps";
 
 const sidebarItems = [
   { id: "overview", label: "Overview" },
@@ -80,6 +81,9 @@ export default function OwnerDashboard({
   const [selectedHostelId, setSelectedHostelId] = useState(
     hostels[0]?.id || null,
   );
+  const [mapLocateBusy, setMapLocateBusy] = useState(false);
+  const [currentMapLocateBusy, setCurrentMapLocateBusy] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [editForm, setEditForm] = useState(null);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [students, setStudents] = useState([]);
@@ -373,6 +377,7 @@ export default function OwnerDashboard({
       onToast("Enter hostel area or address before locating it on the map.");
       return;
     }
+    setMapLocateBusy(true);
     try {
       const location = await geocodeAddress(query);
       setEditForm((prev) => ({
@@ -387,7 +392,51 @@ export default function OwnerDashboard({
       onToast("Hostel map location updated.");
     } catch (error) {
       onToast(error.message || "Unable to locate hostel on Google Maps.");
+    } finally {
+      setMapLocateBusy(false);
     }
+  };
+
+  const applyEditedHostelLocation = (location) => {
+    setEditForm((prev) => ({
+      ...prev,
+      address: location.formattedAddress || prev.address,
+      area: location.area || prev.area,
+      city: location.city || prev.city,
+      pincode: location.pincode || prev.pincode,
+      geoLat: String(location.lat),
+      geoLng: String(location.lng),
+    }));
+    setShowMapPicker(false);
+    onToast("Hostel map location updated.");
+  };
+
+  const handleUseCurrentHostelLocation = () => {
+    if (!navigator.geolocation) {
+      onToast("Current location is not supported on this device.");
+      return;
+    }
+    setCurrentMapLocateBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const location = await reverseGeocodeLatLng(
+            position.coords.latitude,
+            position.coords.longitude,
+          );
+          applyEditedHostelLocation(location);
+        } catch (error) {
+          onToast(error.message || "Unable to use current location.");
+        } finally {
+          setCurrentMapLocateBusy(false);
+        }
+      },
+      () => {
+        setCurrentMapLocateBusy(false);
+        onToast("Location permission denied. Please allow access or pick on map.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   };
 
   const handleEditPhotoFiles = async (event) => {
@@ -978,6 +1027,15 @@ export default function OwnerDashboard({
 
   return (
     <div className="dashboard">
+      <MapPickerModal
+        isOpen={showMapPicker}
+        title="Pick Hostel Location"
+        initialLat={editForm?.geoLat}
+        initialLng={editForm?.geoLng}
+        initialQuery={[editForm?.area, editForm?.address, editForm?.city].filter(Boolean).join(", ")}
+        onClose={() => setShowMapPicker(false)}
+        onPick={applyEditedHostelLocation}
+      />
       <div className="sidebar">
         <div className="sidebar-logo">
           Stay
@@ -1265,10 +1323,34 @@ export default function OwnerDashboard({
                   </div>
                   <div className="form-group">
                     <label className="form-label">Map Location</label>
-                    <button className="nav-btn" type="button" onClick={handleLocateEditedHostel}>
-                      Locate on Google Maps
-                    </button>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <button className="nav-btn" type="button" onClick={handleLocateEditedHostel} disabled={mapLocateBusy}>
+                        {mapLocateBusy ? "Locating..." : "Quick Fill by Address"}
+                      </button>
+                      <button className="nav-btn" type="button" onClick={handleUseCurrentHostelLocation} disabled={currentMapLocateBusy}>
+                        {currentMapLocateBusy ? "Fetching..." : "Use Current Location"}
+                      </button>
+                      <button className="nav-btn" type="button" onClick={() => setShowMapPicker(true)}>
+                        Pick Exact Pin on Map
+                      </button>
+                    </div>
                   </div>
+                  {(editForm.geoLat || editForm.geoLng) && (
+                    <div className="form-group full">
+                      <div className="auth-info" style={{ marginTop: 0 }}>
+                        Map location saved for this hostel.
+                        {" "}
+                        <a
+                          href={`https://www.google.com/maps?q=${editForm.geoLat},${editForm.geoLng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: "var(--terra)", fontWeight: 700 }}
+                        >
+                          Open in Google Maps
+                        </a>
+                      </div>
+                    </div>
+                  )}
                   <div className="form-group full">
                     <label className="form-label">Description</label>
                     <textarea

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/useAuth";
-import { geocodeAddress } from "../utils/googleMaps";
+import MapPickerModal from "../components/MapPickerModal";
+import { geocodeAddress, reverseGeocodeLatLng } from "../utils/googleMaps";
 
 const ROLE_META = {
   owner: { title: "Hostel Owner", subtitle: "Manage listings, menus, enquiries, and bookings." },
@@ -39,7 +40,9 @@ export default function AuthPage({
   const [busy, setBusy] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
+  const [currentLocationBusy, setCurrentLocationBusy] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const isAdminAuth = role === "admin";
 
   useEffect(() => {
@@ -152,8 +155,59 @@ export default function AuthPage({
       setLocationBusy(false);
     }
   };
+
+  const applyPickedHostelLocation = (location) => {
+    setForm((prev) => ({
+      ...prev,
+      hostelAddress: location.formattedAddress || prev.hostelAddress,
+      hostelArea: location.area || prev.hostelArea,
+      hostelCity: location.city || prev.hostelCity,
+      hostelPincode: location.pincode || prev.hostelPincode,
+      hostelGeoLat: String(location.lat),
+      hostelGeoLng: String(location.lng),
+    }));
+    setShowMapPicker(false);
+  };
+
+  const handleUseCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      setError("Current location is not supported on this device.");
+      return;
+    }
+    setError("");
+    setCurrentLocationBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const location = await reverseGeocodeLatLng(
+            position.coords.latitude,
+            position.coords.longitude,
+          );
+          applyPickedHostelLocation(location);
+        } catch (geoError) {
+          setError(geoError.message || "Unable to use current location.");
+        } finally {
+          setCurrentLocationBusy(false);
+        }
+      },
+      () => {
+        setCurrentLocationBusy(false);
+        setError("Location permission denied. Please allow access or pick on map.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
   return (
     <div className="auth-wrap">
+      <MapPickerModal
+        isOpen={showMapPicker}
+        title="Pick Hostel Location"
+        initialLat={form.hostelGeoLat}
+        initialLng={form.hostelGeoLng}
+        initialQuery={[form.hostelArea, form.hostelAddress, form.hostelCity].filter(Boolean).join(", ")}
+        onClose={() => setShowMapPicker(false)}
+        onPick={applyPickedHostelLocation}
+      />
       <div className="auth-card">
         <button className="back-btn auth-back" onClick={onBack}>
           Back
@@ -387,14 +441,31 @@ export default function AuthPage({
                 />
               </div>
               <div className="form-group full">
-                <button
-                  className="nav-btn"
-                  type="button"
-                  onClick={handleLocateHostel}
-                  disabled={locationBusy}
-                >
-                  {locationBusy ? "Locating..." : "Locate Hostel on Google Maps"}
-                </button>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    className="nav-btn"
+                    type="button"
+                    onClick={handleLocateHostel}
+                    disabled={locationBusy}
+                  >
+                    {locationBusy ? "Locating..." : "Quick Fill by Address"}
+                  </button>
+                  <button
+                    className="nav-btn"
+                    type="button"
+                    onClick={handleUseCurrentLocation}
+                    disabled={currentLocationBusy}
+                  >
+                    {currentLocationBusy ? "Fetching..." : "Use Current Location"}
+                  </button>
+                  <button
+                    className="nav-btn"
+                    type="button"
+                    onClick={() => setShowMapPicker(true)}
+                  >
+                    Pick Exact Pin on Map
+                  </button>
+                </div>
               </div>
               {(form.hostelGeoLat || form.hostelGeoLng) && (
                 <div className="auth-info">
