@@ -17,6 +17,18 @@ import {
 } from "./data/appStore";
 import "./styles/staynest.css";
 
+const NAV_STATE_KEY = "staynest_nav_state";
+
+function readSavedNavState() {
+  try {
+    const raw = localStorage.getItem(NAV_STATE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function formatNotificationTime(value) {
   if (!value) return "";
   try {
@@ -36,22 +48,20 @@ function formatNotificationTime(value) {
 export default function App() {
   const { user, logout } = useAuth();
   const isHandlingPopState = useRef(false);
-  const [page, setPage] = useState(() => {
-    const saved = localStorage.getItem("staynest_last_page");
-    return saved || "home";
-  });
-  const [selectedHostelId, setSelectedHostelId] = useState(null);
+  const savedNavState = useMemo(() => readSavedNavState(), []);
+  const [page, setPage] = useState(() => savedNavState?.page || localStorage.getItem("staynest_last_page") || "home");
+  const [selectedHostelId, setSelectedHostelId] = useState(savedNavState?.selectedHostelId ?? null);
   const [toastMessage, setToastMessage] = useState(null);
-  const [authRole, setAuthRole] = useState("guest");
+  const [authRole, setAuthRole] = useState(savedNavState?.authRole || "guest");
   const [hostels, setHostels] = useState([]);
   const [loadingHostels, setLoadingHostels] = useState(true);
   const [ownerRequests, setOwnerRequests] = useState([]);
   const [studentRequests, setStudentRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [ownerInitialTab, setOwnerInitialTab] = useState("overview");
-  const [adminInitialTab, setAdminInitialTab] = useState("overview");
-  const [studentInitialTab, setStudentInitialTab] = useState("overview");
+  const [ownerInitialTab, setOwnerInitialTab] = useState(savedNavState?.ownerInitialTab || "overview");
+  const [adminInitialTab, setAdminInitialTab] = useState(savedNavState?.adminInitialTab || "overview");
+  const [studentInitialTab, setStudentInitialTab] = useState(savedNavState?.studentInitialTab || "overview");
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const bellRef = useRef(null);
 
@@ -155,13 +165,13 @@ export default function App() {
 
   useEffect(() => {
     if (user?.role === "owner") {
-      setPage("owner");
+      setPage((current) => (current === "auth" ? "owner" : current));
     }
     if (user?.role === "guest") {
-      setPage("student");
+      setPage((current) => (current === "auth" ? "student" : current));
     }
     if (user?.role === "admin") {
-      setPage("admin");
+      setPage((current) => (current === "auth" ? "admin" : current));
     }
   }, [user]);
 
@@ -170,15 +180,32 @@ export default function App() {
   }, [page]);
 
   useEffect(() => {
+    localStorage.setItem(
+      NAV_STATE_KEY,
+      JSON.stringify({
+        page,
+        authRole,
+        selectedHostelId,
+        ownerInitialTab,
+        adminInitialTab,
+        studentInitialTab,
+      }),
+    );
+  }, [page, authRole, selectedHostelId, ownerInitialTab, adminInitialTab, studentInitialTab]);
+
+  useEffect(() => {
     window.history.replaceState({
       page,
       authRole,
       selectedHostelId,
+      ownerInitialTab,
+      adminInitialTab,
+      studentInitialTab,
     }, "");
   }, []);
 
   useEffect(() => {
-    const nextState = { page, authRole, selectedHostelId };
+    const nextState = { page, authRole, selectedHostelId, ownerInitialTab, adminInitialTab, studentInitialTab };
     if (isHandlingPopState.current) {
       isHandlingPopState.current = false;
       window.history.replaceState(nextState, "");
@@ -198,6 +225,9 @@ export default function App() {
       isHandlingPopState.current = true;
       setAuthRole(state.authRole || "guest");
       setSelectedHostelId(state.selectedHostelId ?? null);
+      setOwnerInitialTab(state.ownerInitialTab || "overview");
+      setAdminInitialTab(state.adminInitialTab || "overview");
+      setStudentInitialTab(state.studentInitialTab || "overview");
       setPage(state.page || "home");
       setShowMobileMenu(false);
     };
@@ -216,6 +246,14 @@ export default function App() {
   const openAuth = (role) => {
     setAuthRole(role);
     navigateTo("auth");
+  };
+
+  const handleOwnerTabChange = (tab) => {
+    setOwnerInitialTab(tab || "overview");
+  };
+
+  const handleAdminTabChange = (tab) => {
+    setAdminInitialTab(tab || "overview");
   };
 
   const seenKey = getNotificationSeenKey();
@@ -626,6 +664,7 @@ export default function App() {
           requests={ownerRequests}
           onRequestStatusChange={handleOwnerRequestAction}
           onBack={() => navigateTo("home")}
+          onTabChange={handleOwnerTabChange}
           onToast={showToast}
           onRefreshHostels={refreshHostels}
           onLogout={() => {
@@ -640,6 +679,7 @@ export default function App() {
         <AdminDashboard
           initialTab={adminInitialTab}
           adminName={user.name}
+          onTabChange={handleAdminTabChange}
           onToast={showToast}
           onLogout={() => {
             logout();

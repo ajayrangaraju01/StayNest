@@ -22,7 +22,7 @@ const sidebarItems = [
   { id: "reviews", label: "Reviews" },
 ];
 
-export default function AdminDashboard({ adminName, onLogout, onToast, initialTab = "overview" }) {
+export default function AdminDashboard({ adminName, onLogout, onToast, initialTab = "overview", onTabChange }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [overview, setOverview] = useState(null);
   const [owners, setOwners] = useState([]);
@@ -71,6 +71,10 @@ export default function AdminDashboard({ adminName, onLogout, onToast, initialTa
   useEffect(() => {
     setActiveTab(initialTab || "overview");
   }, [initialTab]);
+
+  useEffect(() => {
+    onTabChange?.(activeTab);
+  }, [activeTab, onTabChange]);
 
   const handleOwnerAction = async (userId, payload, successMessage) => {
     const actionLabel = payload.verification_state || payload.status || "update";

@@ -1937,6 +1937,10 @@ h3,
 }
 
 @media (max-width: 768px) {
+  .nav {
+    display: none;
+  }
+
   .app-mobile-shell {
     padding-top: 72px;
     padding-bottom: 24px;
@@ -2064,10 +2068,6 @@ h3,
 
   .sidebar {
     display: none;
-  }
-
-  .nav {
-    padding: 0 16px;
   }
 
   .nav-links {

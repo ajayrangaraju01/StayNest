@@ -49,6 +49,7 @@ export default function OwnerDashboard({
   requests,
   onRequestStatusChange,
   onBack,
+  onTabChange,
   onToast,
   onLogout,
   onRefreshHostels,
@@ -208,6 +209,10 @@ export default function OwnerDashboard({
       setEditMobileSection("basic");
     }
   }, [activeTab, selectedHostelId]);
+
+  useEffect(() => {
+    onTabChange?.(activeTab);
+  }, [activeTab, onTabChange]);
 
   const calculatedRoomTotals = useMemo(() => {
     if (!editForm?.floorRoomCounts?.length) return {};
