@@ -196,6 +196,87 @@ export async function reverseGeocodeLatLng(lat, lng) {
   }
 }
 
+function normalizeNominatimSuggestion(item) {
+  const mapped = mapNominatimPayload(item);
+  return {
+    id: `nominatim-${item.place_id || mapped.formattedAddress}`,
+    label: mapped.area && mapped.city
+      ? `${mapped.area}, ${mapped.city}`
+      : mapped.formattedAddress,
+    secondaryText: mapped.formattedAddress,
+    lat: mapped.lat,
+    lng: mapped.lng,
+    area: mapped.area,
+    city: mapped.city,
+    pincode: mapped.pincode,
+    formattedAddress: mapped.formattedAddress,
+    source: "maps",
+  };
+}
+
+async function searchSuggestionsWithNominatim(query) {
+  const params = new URLSearchParams({
+    q: query,
+    format: "jsonv2",
+    addressdetails: "1",
+    limit: "5",
+  });
+  const data = await fetchJsonWithTimeout(
+    `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+    "Suggestions took too long to load. Please try again.",
+  );
+  if (!Array.isArray(data)) return [];
+  return data.map(normalizeNominatimSuggestion);
+}
+
+function searchSuggestionsWithGoogle(query, near) {
+  return loadGoogleMapsApi().then((google) => withTimeout((resolve, reject) => {
+    const service = new google.maps.places.AutocompleteService();
+    const request = {
+      input: query,
+      componentRestrictions: { country: "in" },
+      types: ["geocode"],
+    };
+
+    if (near?.lat != null && near?.lng != null) {
+      request.locationBias = {
+        center: { lat: Number(near.lat), lng: Number(near.lng) },
+        radius: 15000,
+      };
+    }
+
+    service.getPlacePredictions(request, (predictions, status) => {
+      if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
+        reject(new Error("Location suggestions are not available right now."));
+        return;
+      }
+
+      resolve(predictions.slice(0, 5).map((item) => ({
+        id: item.place_id,
+        label: item.structured_formatting?.main_text || item.description,
+        secondaryText: item.structured_formatting?.secondary_text || item.description,
+        formattedAddress: item.description,
+        source: "maps",
+      })));
+    });
+  }, "Suggestions took too long to load. Please try again."));
+}
+
+export async function searchLocationSuggestions(query, near = null) {
+  const trimmed = (query || "").trim();
+  if (!trimmed) return [];
+
+  try {
+    return await searchSuggestionsWithGoogle(trimmed, near);
+  } catch {
+    try {
+      return await searchSuggestionsWithNominatim(trimmed);
+    } catch {
+      return [];
+    }
+  }
+}
+
 export function haversineDistanceKm(pointA, pointB) {
   if (!pointA || !pointB) return null;
   const lat1 = Number(pointA.lat);

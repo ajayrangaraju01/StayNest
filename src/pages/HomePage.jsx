@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import HostelCard from "../components/HostelCard";
-import { geocodeAddress, haversineDistanceKm } from "../utils/googleMaps";
+import { geocodeAddress, haversineDistanceKm, searchLocationSuggestions } from "../utils/googleMaps";
 
 function normalizeLocationValue(value) {
   return (value || "").trim().toLowerCase();
@@ -20,6 +20,11 @@ export default function HomePage({
   const [searchLabel, setSearchLabel] = useState("");
   const [distanceRadiusKm, setDistanceRadiusKm] = useState(15);
   const [searchBusy, setSearchBusy] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsBusy, setSuggestionsBusy] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const searchRef = useRef(null);
   const locationOptions = useMemo(() => {
     const dynamicLocations = hostels
       .flatMap((hostel) => [hostel.location, hostel.city])
@@ -38,6 +43,46 @@ export default function HomePage({
       ...hostels.flatMap((hostel) => hostel.rooms.map((room) => Number(room.price || 0)).filter((price) => price > 0)),
     )
     : 0;
+  const localSuggestions = useMemo(() => {
+    const normalizedQuery = normalizeLocationValue(searchQuery);
+    if (!normalizedQuery || normalizedQuery.length < 2) return [];
+
+    return hostels
+      .filter((hostel) => {
+        const searchableText = [
+          hostel.name,
+          hostel.location,
+          hostel.city,
+          hostel.address,
+          hostel.pincode,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return searchableText.includes(normalizedQuery);
+      })
+      .slice(0, 4)
+      .map((hostel) => ({
+        id: `hostel-${hostel.id}`,
+        type: "hostel",
+        label: hostel.name,
+        secondaryText: [hostel.location, hostel.city].filter(Boolean).join(", "),
+        hostel,
+      }));
+  }, [hostels, searchQuery]);
+  const combinedSuggestions = useMemo(() => {
+    const hostelIds = new Set(localSuggestions.map((item) => item.id));
+    const remoteSuggestions = searchSuggestions
+      .filter((item) => !hostelIds.has(`hostel-${item.id}`))
+      .map((item) => ({
+        id: `place-${item.id}`,
+        type: "place",
+        label: item.label,
+        secondaryText: item.secondaryText || item.formattedAddress || "",
+        suggestion: item,
+      }));
+    return [...localSuggestions, ...remoteSuggestions].slice(0, 7);
+  }, [localSuggestions, searchSuggestions]);
 
   const filteredHostels = hostels.map((hostel) => {
     const exactDistanceKm = searchPoint && hostel.geoLat != null && hostel.geoLng != null
@@ -101,6 +146,8 @@ export default function HomePage({
   });
 
   const handleSearchClick = async () => {
+    setSuggestionsOpen(false);
+    setActiveSuggestionIndex(-1);
     onSearch(searchQuery);
     if (!searchQuery.trim()) {
       setSearchPoint(null);
@@ -115,6 +162,86 @@ export default function HomePage({
     } catch {
       setSearchPoint(null);
       setSearchLabel("");
+    } finally {
+      setSearchBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setSearchSuggestions([]);
+      setSuggestionsBusy(false);
+      return undefined;
+    }
+
+    let isActive = true;
+    const timer = window.setTimeout(async () => {
+      setSuggestionsBusy(true);
+      const suggestions = await searchLocationSuggestions(searchQuery, searchPoint);
+      if (!isActive) return;
+      setSearchSuggestions(suggestions);
+      setSuggestionsBusy(false);
+    }, 220);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery, searchPoint]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!searchRef.current?.contains(event.target)) {
+        setSuggestionsOpen(false);
+        setActiveSuggestionIndex(-1);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const runSearchForSuggestion = async (item) => {
+    if (!item) return;
+
+    if (item.type === "hostel") {
+      const { hostel } = item;
+      const nextQuery = [hostel.name, hostel.location, hostel.city].filter(Boolean).join(", ");
+      setSearchQuery(nextQuery);
+      setSuggestionsOpen(false);
+      setActiveSuggestionIndex(-1);
+      onSearch(nextQuery);
+
+      if (hostel.geoLat != null && hostel.geoLng != null) {
+        setSearchPoint({ lat: hostel.geoLat, lng: hostel.geoLng });
+        setSearchLabel(hostel.location || hostel.city || hostel.name);
+      } else {
+        setSearchPoint(null);
+        setSearchLabel(hostel.location || hostel.city || hostel.name);
+      }
+      return;
+    }
+
+    const place = item.suggestion;
+    const nextQuery = place.formattedAddress || [place.label, place.secondaryText].filter(Boolean).join(", ");
+    setSearchQuery(nextQuery);
+    setSuggestionsOpen(false);
+    setActiveSuggestionIndex(-1);
+    onSearch(nextQuery);
+
+    if (place.lat != null && place.lng != null) {
+      setSearchPoint({ lat: place.lat, lng: place.lng });
+      setSearchLabel(place.area || place.city || place.label || nextQuery);
+      return;
+    }
+
+    setSearchBusy(true);
+    try {
+      const location = await geocodeAddress(nextQuery);
+      setSearchPoint({ lat: location.lat, lng: location.lng });
+      setSearchLabel(location.area || location.city || place.label || nextQuery);
+    } catch {
+      setSearchPoint(null);
+      setSearchLabel(place.label || "");
     } finally {
       setSearchBusy(false);
     }
@@ -142,16 +269,66 @@ export default function HomePage({
             <span key={item} className="hero-workflow-pill">{item}</span>
           ))}
         </div>
-        <div className="hero-search">
+        <div className="hero-search" ref={searchRef}>
           <input
             placeholder="Search by location, area or hostel name..."
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && handleSearchClick()}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setSuggestionsOpen(true);
+              setActiveSuggestionIndex(-1);
+            }}
+            onFocus={() => setSuggestionsOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" && combinedSuggestions.length > 0) {
+                event.preventDefault();
+                setSuggestionsOpen(true);
+                setActiveSuggestionIndex((current) => Math.min(current + 1, combinedSuggestions.length - 1));
+                return;
+              }
+              if (event.key === "ArrowUp" && combinedSuggestions.length > 0) {
+                event.preventDefault();
+                setActiveSuggestionIndex((current) => Math.max(current - 1, 0));
+                return;
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (suggestionsOpen && activeSuggestionIndex >= 0 && combinedSuggestions[activeSuggestionIndex]) {
+                  runSearchForSuggestion(combinedSuggestions[activeSuggestionIndex]);
+                  return;
+                }
+                handleSearchClick();
+              }
+            }}
           />
           <button className="hero-search-btn" onClick={handleSearchClick} disabled={searchBusy}>
             {searchBusy ? "Searching..." : "Search Hostels"}
           </button>
+          {suggestionsOpen && (combinedSuggestions.length > 0 || suggestionsBusy) && (
+            <div className="hero-search-suggestions">
+              {localSuggestions.length > 0 && (
+                <div className="hero-search-group-label">Matching hostels</div>
+              )}
+              {combinedSuggestions.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`hero-search-suggestion${activeSuggestionIndex === index ? " active" : ""}`}
+                  onClick={() => runSearchForSuggestion(item)}
+                >
+                  <span className="hero-search-suggestion-title">{item.label}</span>
+                  {item.secondaryText && (
+                    <span className="hero-search-suggestion-meta">
+                      {item.type === "hostel" ? "PG match" : "Nearby place"} - {item.secondaryText}
+                    </span>
+                  )}
+                </button>
+              ))}
+              {suggestionsBusy && (
+                <div className="hero-search-suggestion-loading">Loading suggestions...</div>
+              )}
+            </div>
+          )}
         </div>
         {searchPoint && (
           <div className="card-signal-row" style={{ marginTop: 14 }}>
