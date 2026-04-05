@@ -24,7 +24,7 @@ export default function HostelDetail({
       ? `${hostel.geoLat},${hostel.geoLng}`
       : [hostel.name, hostel.address, hostel.location, hostel.city, hostel.pincode].filter(Boolean).join(", "),
   );
-  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${locationQuery}`;
+  const mapLocationUrl = `https://www.google.com/maps/search/?api=1&query=${locationQuery}`;
 
   const selectedRoomData = hostel.rooms.find((room) => room.type === selectedRoom);
   const bookingAdvance = selectedRoomData ? Number(selectedRoomData.bookingAdvance || 0) : 0;
@@ -203,9 +203,9 @@ export default function HostelDetail({
                 <div>{hostel.address}</div>
                 <div>{[hostel.location, hostel.city, hostel.pincode].filter(Boolean).join(", ")}</div>
               </div>
-              <a className="detail-map-btn" href={directionsUrl} target="_blank" rel="noreferrer">
+              <a className="detail-map-btn" href={mapLocationUrl} target="_blank" rel="noreferrer">
                 <span className="detail-map-btn-icon">-></span>
-                <span>Navigate on Google Maps</span>
+                <span>Open Location on Google Maps</span>
               </a>
             </div>
 
