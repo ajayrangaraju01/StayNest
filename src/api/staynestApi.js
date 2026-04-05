@@ -123,6 +123,10 @@ export function apiPut(path, body) {
   return apiFetch(path, { method: "PUT", body: JSON.stringify(body) });
 }
 
+export function apiDelete(path) {
+  return apiFetch(path, { method: "DELETE" });
+}
+
 export async function apiDownload(path, filename = "download.csv") {
   const token = getAccessToken();
   const response = await fetch(`${API_BASE}${path}`, {
@@ -285,6 +289,14 @@ export function fetchFeePayments() {
 
 export function createFeePayment(payload) {
   return apiPost("/fee-payments/", payload);
+}
+
+export function updateFeePayment(id, payload) {
+  return apiPatch(`/fee-payments/${id}/`, payload);
+}
+
+export function deleteFeePayment(id) {
+  return apiDelete(`/fee-payments/${id}/`);
 }
 
 export function fetchMenus({ useAuth = true } = {}) {

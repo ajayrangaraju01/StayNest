@@ -53,6 +53,19 @@ def ledger_outstanding_amount(ledger):
     return max(Decimal("0"), (ledger.amount_due + ledger.late_fee) - ledger.amount_paid)
 
 
+def recalculate_ledger_payment_status(ledger):
+    amount = ledger.payments.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+    ledger.amount_paid = amount
+    total_due = ledger.amount_due + ledger.late_fee
+    if amount <= 0:
+        ledger.status = FeeLedger.Status.OVERDUE if ledger.due_date < timezone.now().date() else FeeLedger.Status.PENDING
+    elif amount < total_due:
+        ledger.status = FeeLedger.Status.OVERDUE if ledger.due_date < timezone.now().date() else FeeLedger.Status.PARTIAL
+    else:
+        ledger.status = FeeLedger.Status.PAID
+    ledger.save(update_fields=["amount_paid", "status"])
+
+
 def get_booking_due_dates(move_in_date, today):
     if not move_in_date:
         return None, None
@@ -1230,16 +1243,36 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Ledger not found."}, status=status.HTTP_404_NOT_FOUND)
         response = super().create(request, *args, **kwargs)
         if response.status_code < 300:
-            amount = ledger.payments.aggregate(total=models.Sum("amount"))["total"] or 0
-            ledger.amount_paid = amount
-            total_due = ledger.amount_due + ledger.late_fee
-            if amount <= 0:
-                ledger.status = FeeLedger.Status.PENDING
-            elif amount < total_due:
-                ledger.status = FeeLedger.Status.PARTIAL
-            else:
-                ledger.status = FeeLedger.Status.PAID
-            ledger.save(update_fields=["amount_paid", "status"])
+            recalculate_ledger_payment_status(ledger)
+        return response
+
+    def update(self, request, *args, **kwargs):
+        if request.user.role != User.Role.OWNER:
+            return Response({"detail": "Only owners can edit payments."}, status=status.HTTP_403_FORBIDDEN)
+        payment = self.get_object()
+        if payment.ledger.hostel.owner_id != request.user.id:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        original_ledger = payment.ledger
+        response = super().update(request, *args, **kwargs)
+        if response.status_code < 300:
+            original_ledger.refresh_from_db()
+            recalculate_ledger_payment_status(original_ledger)
+            if payment.ledger_id != original_ledger.id:
+                payment.ledger.refresh_from_db()
+                recalculate_ledger_payment_status(payment.ledger)
+        return response
+
+    def destroy(self, request, *args, **kwargs):
+        if request.user.role != User.Role.OWNER:
+            return Response({"detail": "Only owners can delete payments."}, status=status.HTTP_403_FORBIDDEN)
+        payment = self.get_object()
+        if payment.ledger.hostel.owner_id != request.user.id:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        ledger = payment.ledger
+        response = super().destroy(request, *args, **kwargs)
+        if response.status_code < 300:
+            ledger.refresh_from_db()
+            recalculate_ledger_payment_status(ledger)
         return response
 
 

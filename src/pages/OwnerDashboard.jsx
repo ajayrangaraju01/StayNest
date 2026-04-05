@@ -4,6 +4,7 @@ import {
   createComplaint,
   createFeeLedger,
   createFeePayment,
+  deleteFeePayment,
   createMenu,
   createWalkinStudent,
   downloadOwnerFeeLedgerExport,
@@ -19,6 +20,7 @@ import {
   sendOwnerFeeReminders,
   updateLeave,
   updateBooking,
+  updateFeePayment,
   updateMenu,
   updateOwnerGuest,
   updateReview,
@@ -116,6 +118,7 @@ export default function OwnerDashboard({
     lateFee: "0",
   });
   const [paymentForm, setPaymentForm] = useState({ ledgerId: "", amount: "", mode: "upi", referenceId: "" });
+  const [editingPaymentId, setEditingPaymentId] = useState(null);
   const [menuForm, setMenuForm] = useState({
     hostelId: "",
     date: "",
@@ -146,6 +149,40 @@ export default function OwnerDashboard({
     collegeCompany: "",
     emergencyContact: "",
   });
+
+  const applyStudentsData = (data) => {
+    const nextStudents = data || [];
+    setStudents(nextStudents);
+    setGuestEditForms(
+      nextStudents.reduce((acc, guest) => {
+        acc[guest.student_id] = {
+          name: guest.student_name || "",
+          phone: guest.student_phone || "",
+          email: guest.student_email || "",
+          age: guest.age || "",
+          college_company: guest.college_company || "",
+          emergency_contact: guest.emergency_contact || "",
+        };
+        return acc;
+      }, {}),
+    );
+  };
+
+  const removePaymentFromLedgerList = (ledgerList, paymentId) => (ledgerList || []).map((ledger) => {
+    const remainingPayments = (ledger.payments || []).filter((payment) => payment.id !== paymentId);
+    return {
+      ...ledger,
+      payments: remainingPayments,
+    };
+  });
+
+  const removePaymentFromStudents = (studentList, paymentId) => (studentList || []).map((student) => ({
+    ...student,
+    fee_history: (student.fee_history || []).map((ledger) => ({
+      ...ledger,
+      payments: (ledger.payments || []).filter((payment) => payment.id !== paymentId),
+    })),
+  }));
 
   const summarizeHostelRooms = (hostel) =>
     (hostel?.rooms || []).reduce((acc, room) => {
@@ -248,6 +285,15 @@ export default function OwnerDashboard({
       overdue,
       dueToday,
     };
+  };
+  const formatDateKey = (value) => {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
   const calculatedRoomTotals = useMemo(() => {
@@ -735,25 +781,13 @@ export default function OwnerDashboard({
   }, [selectedHostel]);
 
   useEffect(() => {
+    const tabsNeedingStudents = ["overview", "students", "fees", "complaints"];
     const loadStudents = async () => {
-      if (activeTab !== "students") return;
+      if (!tabsNeedingStudents.includes(activeTab)) return;
       setStudentsLoading(true);
       try {
         const data = await fetchOwnerStudents();
-        setStudents(data);
-        setGuestEditForms(
-          (data || []).reduce((acc, guest) => {
-            acc[guest.student_id] = {
-              name: guest.student_name || "",
-              phone: guest.student_phone || "",
-              email: guest.student_email || "",
-              age: guest.age || "",
-              college_company: guest.college_company || "",
-              emergency_contact: guest.emergency_contact || "",
-            };
-            return acc;
-          }, {}),
-        );
+        applyStudentsData(data);
       } catch (error) {
         onToast(error.message || "Unable to load guests.");
       } finally {
@@ -836,10 +870,60 @@ export default function OwnerDashboard({
 
     return list.sort((a, b) => (a.student_name || "").localeCompare(b.student_name || ""));
   }, [students, guestSortBy]);
+  const sortByOldestDueDate = (list, getDate) => [...list].sort((a, b) => {
+    const aDate = getDate(a);
+    const bDate = getDate(b);
+    const aTime = aDate ? new Date(aDate).getTime() : Number.POSITIVE_INFINITY;
+    const bTime = bDate ? new Date(bDate).getTime() : Number.POSITIVE_INFINITY;
+    const safeATime = Number.isNaN(aTime) ? Number.POSITIVE_INFINITY : aTime;
+    const safeBTime = Number.isNaN(bTime) ? Number.POSITIVE_INFINITY : bTime;
+    if (safeATime !== safeBTime) return safeATime - safeBTime;
+
+    const aName = a.student_name || "";
+    const bName = b.student_name || "";
+    return aName.localeCompare(bName);
+  });
   const activeGuests = sortedStudents.filter((student) => student.status !== "checked_out");
   const checkedOutGuests = sortedStudents.filter((student) => student.status === "checked_out");
-  const dueTodayGuests = activeGuests.filter((student) => getDueMeta(student.upcoming_fee_due_date).dueToday);
-  const overdueGuests = activeGuests.filter((student) => getDueMeta(student.upcoming_fee_due_date).overdue);
+  const todayDateKey = formatDateKey(startOfTodayForDues);
+  const dueTodayGuests = useMemo(
+    () => sortByOldestDueDate(
+      feeLedgers
+        .filter((ledger) => {
+          const dueDateKey = formatDateKey(ledger.due_date);
+          const amountDue = Number(ledger.amount_due || 0);
+          const amountPaid = Number(ledger.amount_paid || 0);
+          const lateFee = Number(ledger.late_fee || 0);
+          const outstanding = Math.max(0, amountDue + lateFee - amountPaid);
+          return dueDateKey === todayDateKey && outstanding > 0;
+        })
+        .map((ledger) => {
+          const matchedStudent = activeGuests.find((student) => student.student_id === ledger.student);
+          return {
+            student_id: ledger.student,
+            student_name: ledger.student_name || matchedStudent?.student_name || "Guest",
+            upcoming_fee_amount: Math.max(
+              0,
+              Number(ledger.amount_due || 0) + Number(ledger.late_fee || 0) - Number(ledger.amount_paid || 0),
+            ),
+            upcoming_fee_due_date: ledger.due_date,
+          };
+        }),
+      (student) => student.upcoming_fee_due_date,
+    ),
+    [feeLedgers, activeGuests, todayDateKey],
+  );
+  const overdueGuests = useMemo(
+    () => sortByOldestDueDate(
+      activeGuests.filter((student) => getDueMeta(student.upcoming_fee_due_date).overdue),
+      (student) => student.upcoming_fee_due_date,
+    ),
+    [activeGuests],
+  );
+  const sortedDefaulters = useMemo(
+    () => sortByOldestDueDate(defaulters, (item) => item.due_date),
+    [defaulters],
+  );
 
   const handleGuestFieldChange = (guestId, field, value) => {
     setGuestEditForms((prev) => ({
@@ -902,26 +986,73 @@ export default function OwnerDashboard({
       setFeeLedgers(await fetchFeeLedgers());
     } catch (error) {
       onToast(error.message || "Unable to create fee ledger.");
-    }
-  };
+      }
+    };
 
-  const handleRecordPayment = async () => {
-    try {
-      await createFeePayment({
-        ledger: Number(paymentForm.ledgerId),
-        amount: Number(paymentForm.amount || 0),
-        mode: paymentForm.mode,
-        reference_id: paymentForm.referenceId,
+    const refreshFeeOps = async () => {
+      const [ledgerData, analyticsData, defaulterData, studentData] = await Promise.all([
+        fetchFeeLedgers(),
+        fetchOwnerAnalytics(),
+        fetchOwnerDefaulters(),
+        fetchOwnerStudents(),
+      ]);
+      setFeeLedgers(ledgerData || []);
+      setOwnerAnalytics(analyticsData);
+      setDefaulters(defaulterData || []);
+      applyStudentsData(studentData);
+    };
+  
+    const handleRecordPayment = async () => {
+      try {
+        const payload = {
+          ledger: Number(paymentForm.ledgerId),
+          amount: Number(paymentForm.amount || 0),
+          mode: paymentForm.mode,
+          reference_id: paymentForm.referenceId,
+        };
+        if (editingPaymentId) {
+          await updateFeePayment(editingPaymentId, payload);
+          onToast("Payment updated.");
+        } else {
+          await createFeePayment(payload);
+          onToast("Payment recorded.");
+        }
+        setPaymentForm({ ledgerId: "", amount: "", mode: "upi", referenceId: "" });
+        setEditingPaymentId(null);
+        await refreshFeeOps();
+      } catch (error) {
+        onToast(error.message || `Unable to ${editingPaymentId ? "update" : "record"} payment.`);
+      }
+    };
+
+    const handleEditPayment = (payment, ledger) => {
+      setEditingPaymentId(payment.id);
+      setPaymentForm({
+        ledgerId: String(ledger.id),
+        amount: String(payment.amount ?? ""),
+        mode: payment.mode || "upi",
+        referenceId: payment.reference_id || "",
       });
-      onToast("Payment recorded.");
-      setPaymentForm({ ledgerId: "", amount: "", mode: "upi", referenceId: "" });
-      setFeeLedgers(await fetchFeeLedgers());
-      setOwnerAnalytics(await fetchOwnerAnalytics());
-      setDefaulters(await fetchOwnerDefaulters());
-    } catch (error) {
-      onToast(error.message || "Unable to record payment.");
-    }
-  };
+      selectTab("fees");
+    };
+
+    const handleDeletePayment = async (paymentId) => {
+      const confirmed = window.confirm("Delete this payment record?");
+      if (!confirmed) return;
+      try {
+        setFeeLedgers((current) => removePaymentFromLedgerList(current, paymentId));
+        setStudents((current) => removePaymentFromStudents(current, paymentId));
+        await deleteFeePayment(paymentId);
+        onToast("Payment deleted.");
+        if (editingPaymentId === paymentId) {
+          setEditingPaymentId(null);
+          setPaymentForm({ ledgerId: "", amount: "", mode: "upi", referenceId: "" });
+        }
+        await refreshFeeOps();
+      } catch (error) {
+        onToast(error.message || "Unable to delete payment.");
+      }
+    };
 
   const handleSendReminders = async () => {
     try {
@@ -2002,13 +2133,39 @@ export default function OwnerDashboard({
                   <div style={{ marginTop: 6, fontSize: 12 }}>
                     Status: <strong>{ledger.status}</strong>
                   </div>
-                  {ledger.payments?.length > 0 && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: "var(--warm-gray)" }}>
-                      {ledger.payments.map((payment) => `INR ${payment.amount} via ${payment.mode} on ${formatDisplayDateTime(payment.paid_at)}`).join(" | ")}
-                    </div>
-                  )}
-                </div>
-              )) : (
+                    {ledger.payments?.length > 0 && (
+                      <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                        {ledger.payments.map((payment) => (
+                          <div
+                            key={payment.id}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 10,
+                              alignItems: "center",
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              background: "var(--cream-soft)",
+                              fontSize: 12,
+                            }}
+                          >
+                            <div style={{ color: "var(--warm-gray)" }}>
+                              INR {payment.amount} via {payment.mode} on {formatDisplayDateTime(payment.paid_at)}
+                            </div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <button className="nav-btn" type="button" onClick={() => handleEditPayment(payment, ledger)}>
+                                Edit
+                              </button>
+                              <button className="nav-btn" type="button" onClick={() => handleDeletePayment(payment.id)}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )) : (
                 <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No fee history yet.</p>
               )}
             </div>
@@ -2449,8 +2606,8 @@ export default function OwnerDashboard({
 
             <div className="form-section">
               <div className="form-section-title">Defaulters</div>
-              {defaulters.length === 0 && <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No overdue guests right now.</p>}
-              {defaulters.map((item) => (
+              {sortedDefaulters.length === 0 && <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No overdue guests right now.</p>}
+              {sortedDefaulters.map((item) => (
                 <div key={item.ledger_id} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: 14, marginBottom: 10, background: "white" }}>
                   <div style={{ fontWeight: 700 }}>{item.student_name}</div>
                   <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
@@ -2500,9 +2657,24 @@ export default function OwnerDashboard({
               <button className="submit-btn" onClick={handleCreateFee} style={{ marginTop: 12 }}>Create Fee</button>
             </div>
 
-            <div className="form-section">
-              <div className="form-section-title">Record Payment</div>
-              <div className="form-grid">
+              <div className="form-section">
+                <div className="form-section-title">Record Payment</div>
+                {editingPaymentId && (
+                  <div style={{ marginTop: 10, marginBottom: 12, fontSize: 13, color: "var(--warm-gray)", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <span>Editing payment record #{editingPaymentId}</span>
+                    <button
+                      className="nav-btn"
+                      type="button"
+                      onClick={() => {
+                        setEditingPaymentId(null);
+                        setPaymentForm({ ledgerId: "", amount: "", mode: "upi", referenceId: "" });
+                      }}
+                    >
+                      Cancel Edit
+                    </button>
+                  </div>
+                )}
+                <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label">Ledger</label>
                   <select className="form-select" value={paymentForm.ledgerId} onChange={(event) => setPaymentForm({ ...paymentForm, ledgerId: event.target.value })}>
@@ -2526,23 +2698,57 @@ export default function OwnerDashboard({
                   <label className="form-label">Reference</label>
                   <input className="form-input" value={paymentForm.referenceId} onChange={(event) => setPaymentForm({ ...paymentForm, referenceId: event.target.value })} />
                 </div>
+                </div>
+                <button className="submit-btn" onClick={handleRecordPayment} style={{ marginTop: 12 }}>
+                  {editingPaymentId ? "Update Payment" : "Record Payment"}
+                </button>
               </div>
-              <button className="submit-btn" onClick={handleRecordPayment} style={{ marginTop: 12 }}>Record Payment</button>
-            </div>
 
-            <div className="form-section">
-              <div className="form-section-title">Fee Ledger History</div>
-              {feeLedgers.length === 0 && <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No fee ledgers yet.</p>}
+              <div className="form-section">
+                <div className="form-section-title">Fee Ledger History</div>
+                {feeLedgers.length === 0 && <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No fee ledgers yet.</p>}
               {feeLedgers.map((ledger) => (
                 <div key={ledger.id} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: 14, marginBottom: 10, background: "white" }}>
                   <div style={{ fontWeight: 700 }}>{ledger.student_name} - {ledger.hostel_name}</div>
-                  <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                    Due {formatDisplayDate(ledger.due_date)} | Amount Due INR {ledger.amount_due} | Paid INR {ledger.amount_paid}
+                    <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
+                      Due {formatDisplayDate(ledger.due_date)} | Amount Due INR {ledger.amount_due} | Paid INR {ledger.amount_paid}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 12 }}>Status: <strong>{ledger.status}</strong></div>
+                    {ledger.payments?.length > 0 && (
+                      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                        {ledger.payments.map((payment) => (
+                          <div
+                            key={payment.id}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 10,
+                              alignItems: "center",
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              background: "var(--cream-soft)",
+                              fontSize: 12,
+                            }}
+                          >
+                            <div style={{ color: "var(--warm-gray)" }}>
+                              INR {payment.amount} via {payment.mode} on {formatDisplayDateTime(payment.paid_at)}
+                              {payment.reference_id ? ` | Ref ${payment.reference_id}` : ""}
+                            </div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <button className="nav-btn" type="button" onClick={() => handleEditPayment(payment, ledger)}>
+                                Edit
+                              </button>
+                              <button className="nav-btn" type="button" onClick={() => handleDeletePayment(payment.id)}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ marginTop: 8, fontSize: 12 }}>Status: <strong>{ledger.status}</strong></div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
           </>
         )}
 
