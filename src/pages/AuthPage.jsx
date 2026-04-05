@@ -34,6 +34,7 @@ export default function AuthPage({
     name: "",
     phone: "",
     email: "",
+    guestGender: "",
     otpCode: "",
     password: "",
     confirmPassword: "",
@@ -97,6 +98,16 @@ export default function AuthPage({
       password: form.password,
       name: form.name,
     };
+
+    if (mode === "signup" && role === "guest") {
+      if (!form.guestGender) {
+        setError("Please select your gender.");
+        return;
+      }
+      payload.studentProfile = {
+        gender: form.guestGender,
+      };
+    }
 
     if (mode === "signup" && role === "owner") {
       if (!form.hostelName || !form.hostelArea || !form.hostelAddress || !form.hostelContact) {
@@ -348,6 +359,22 @@ export default function AuthPage({
                   autoComplete="email"
                 />
               </div>
+
+              {role === "guest" && (
+                <div className="form-group">
+                  <label className="form-label">Gender</label>
+                  <select
+                    className="form-select"
+                    value={form.guestGender}
+                    onChange={(event) => setForm({ ...form, guestGender: event.target.value })}
+                  >
+                    <option value="">Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other / Prefer Co-Live</option>
+                  </select>
+                </div>
+              )}
 
               <div className="auth-otp-row">
                 <input

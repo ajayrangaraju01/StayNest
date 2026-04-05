@@ -48,6 +48,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
+    student_profile = StudentProfileSerializer(required=False)
 
     class Meta:
         model = User
@@ -61,13 +62,15 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "verification_state",
             "email_verified",
             "password",
+            "student_profile",
         )
 
     def create(self, validated_data):
         password = validated_data.pop("password")
+        student_profile_data = validated_data.pop("student_profile", None)
         user = User.objects.create_user(password=password, **validated_data)
         if user.role == User.Role.STUDENT:
-            StudentProfile.objects.create(user=user)
+            StudentProfile.objects.create(user=user, **(student_profile_data or {}))
         if user.role == User.Role.OWNER:
             OwnerProfile.objects.create(user=user)
         return user

@@ -18,6 +18,13 @@ export default function HostelDetail({
   const [moveInDate, setMoveInDate] = useState("");
   const [moveOutDate, setMoveOutDate] = useState("");
   const [message, setMessage] = useState("");
+  const totalImages = hostel.images?.length || 0;
+  const locationQuery = encodeURIComponent(
+    hostel.geoLat != null && hostel.geoLng != null
+      ? `${hostel.geoLat},${hostel.geoLng}`
+      : [hostel.name, hostel.address, hostel.location, hostel.city, hostel.pincode].filter(Boolean).join(", "),
+  );
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${locationQuery}`;
 
   const selectedRoomData = hostel.rooms.find((room) => room.type === selectedRoom);
   const bookingAdvance = selectedRoomData ? Number(selectedRoomData.bookingAdvance || 0) : 0;
@@ -92,24 +99,61 @@ export default function HostelDetail({
     });
   };
 
+  const showNextImage = () => {
+    if (totalImages <= 1) return;
+    setActiveImg((current) => (current + 1) % totalImages);
+  };
+
+  const showPreviousImage = () => {
+    if (totalImages <= 1) return;
+    setActiveImg((current) => (current - 1 + totalImages) % totalImages);
+  };
+
   return (
     <div>
       <div className="detail-hero">
         <div className="detail-gallery">
           <div className="gallery-main">
             <img src={hostel.images[activeImg]} alt={hostel.name} className="gallery-img" />
+            {totalImages > 1 && (
+              <>
+                <button type="button" className="gallery-nav gallery-nav-prev" onClick={showPreviousImage}>
+                  Prev
+                </button>
+                <button type="button" className="gallery-nav gallery-nav-next" onClick={showNextImage}>
+                  Next
+                </button>
+                <div className="gallery-counter">
+                  {activeImg + 1}/{totalImages}
+                </div>
+              </>
+            )}
           </div>
           {hostel.images.slice(1, 3).map((image, index) => (
-            <div key={image}>
+            <div key={image} className="gallery-side-tile">
               <img
                 src={image}
                 alt={hostel.name}
-                className="gallery-img"
+                className={`gallery-img${activeImg === index + 1 ? " active" : ""}`}
                 onClick={() => setActiveImg(index + 1)}
               />
             </div>
           ))}
         </div>
+        {totalImages > 1 && (
+          <div className="gallery-thumb-row">
+            {hostel.images.map((image, index) => (
+              <button
+                key={`${image}-${index}`}
+                type="button"
+                className={`gallery-thumb${activeImg === index ? " active" : ""}`}
+                onClick={() => setActiveImg(index)}
+              >
+                <img src={image} alt={`${hostel.name} ${index + 1}`} className="gallery-thumb-img" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="detail-body">
@@ -151,6 +195,18 @@ export default function HostelDetail({
               {quickSignals.map((signal) => (
                 <span key={signal} className="card-signal">{signal}</span>
               ))}
+            </div>
+
+            <div className="detail-map-card">
+              <div className="rooms-title">Location & Navigation</div>
+              <div className="detail-map-copy">
+                <div>{hostel.address}</div>
+                <div>{[hostel.location, hostel.city, hostel.pincode].filter(Boolean).join(", ")}</div>
+              </div>
+              <a className="detail-map-btn" href={directionsUrl} target="_blank" rel="noreferrer">
+                <span className="detail-map-btn-icon">-></span>
+                <span>Navigate on Google Maps</span>
+              </a>
             </div>
 
             <div className="rooms-title">Amenities</div>

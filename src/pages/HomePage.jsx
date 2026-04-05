@@ -101,6 +101,7 @@ export default function HomePage({
   }).filter((hostel) => {
     const normalizedQuery = normalizeLocationValue(searchQuery);
     const normalizedLocationFilter = normalizeLocationValue(locationFilter);
+    const isLocationSearch = Boolean(searchPoint);
     const searchableText = [
       hostel.location,
       hostel.city,
@@ -113,8 +114,8 @@ export default function HomePage({
       .toLowerCase();
     const matchesSearch =
       !searchQuery
-      || (searchPoint
-        ? (hostel.exactDistanceKm != null || searchableText.includes(normalizedQuery))
+      || (isLocationSearch
+        ? hostel.exactDistanceKm != null
         : searchableText.includes(normalizedQuery));
 
     const matchesGender =
@@ -131,7 +132,7 @@ export default function HomePage({
         .some((value) => normalizeLocationValue(value).includes(normalizedLocationFilter));
 
     const matchesDistance =
-      !searchPoint
+      !isLocationSearch
       || hostel.exactDistanceKm == null
       || hostel.exactDistanceKm <= distanceRadiusKm;
 

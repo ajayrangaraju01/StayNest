@@ -51,6 +51,7 @@ function toSession(user) {
     role: user.role === "student" ? "guest" : user.role,
     status: user.status,
     verificationState: user.verification_state,
+    gender: user.student_profile?.gender || "",
   };
 }
 
@@ -110,7 +111,7 @@ export async function sendPasswordResetOtp(email, role) {
   }
 }
 
-export async function signUp({ name, phone, email, otpCode, password, role, hostel }) {
+export async function signUp({ name, phone, email, otpCode, password, role, hostel, studentProfile }) {
   const normalizedPhone = normalizePhone(phone);
   const normalizedEmail = `${email || ""}`.trim().toLowerCase();
   if (!normalizedPhone) {
@@ -138,6 +139,9 @@ export async function signUp({ name, phone, email, otpCode, password, role, host
     };
     if (hostel && apiRole === "owner") {
       payload.hostel = hostel;
+    }
+    if (studentProfile && apiRole === "student") {
+      payload.student_profile = studentProfile;
     }
     await authRegister(payload);
     const tokens = await authLogin({ email: normalizedEmail, password, role: apiRole });

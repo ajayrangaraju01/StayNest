@@ -45,6 +45,12 @@ function formatNotificationTime(value) {
   }
 }
 
+function mapGuestGenderToAllowedHostelGenders(gender) {
+  if (gender === "male") return ["Boys", "Co-Live"];
+  if (gender === "female") return ["Girls", "Co-Live"];
+  return ["Co-Live"];
+}
+
 export default function App() {
   const { user, logout } = useAuth();
   const isHandlingPopState = useRef(false);
@@ -154,8 +160,14 @@ export default function App() {
     refreshRequests();
   }, [user, hostels]);
   const publicHostels = useMemo(() => {
-    return hostels.filter((hostel) => hostel.moderationStatus === "approved");
-  }, [hostels]);
+    const approvedHostels = hostels.filter((hostel) => hostel.moderationStatus === "approved");
+    if (user?.role !== "guest" || !user.gender) {
+      return approvedHostels;
+    }
+
+    const allowedGenders = mapGuestGenderToAllowedHostelGenders(user.gender);
+    return approvedHostels.filter((hostel) => allowedGenders.includes(hostel.gender));
+  }, [hostels, user]);
   const selectedHostel = useMemo(
     () => hostels.find((hostel) => hostel.id === selectedHostelId) || null,
     [hostels, selectedHostelId],
