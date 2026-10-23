@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import OwnerOverviewTab from "../features/owner/components/OwnerOverviewTab";
+import OwnerEnquiriesTab from "../features/owner/components/OwnerEnquiriesTab";
+import OwnerLeavesTab from "../features/owner/components/OwnerLeavesTab";
+import OwnerReviewsTab from "../features/owner/components/OwnerReviewsTab";
+import OwnerSettingsTab from "../features/owner/components/OwnerSettingsTab";
 import MapPickerModal from "../components/MapPickerModal";
 import {
   createComplaint,
@@ -1263,185 +1268,18 @@ export default function OwnerDashboard({
         </div>
 
         {activeTab === "overview" && (
-          <>
-            <div className="mobile-quick-grid">
-              {[
-                { label: "Available Beds", value: stats.availableBeds },
-                { label: "Occupied Beds", value: Math.max(0, stats.totalBeds - stats.availableBeds) },
-              ].map((item) => (
-                <div key={item.label} className="mobile-quick-card static">
-                  <span className="mobile-quick-label">{item.label}</span>
-                  <strong className="mobile-quick-value">{item.value}</strong>
-                </div>
-              ))}
-            </div>
-              <div className="stats-row">
-                {[
-                  { label: "Your Hostels", num: stats.totalHostels },
-                  { label: "Active Guests", num: ownerAnalytics?.active_guests_count ?? approvedStudents.length },
-                  { label: "Expected This Month", num: `INR ${expectedThisMonth}` },
-                  { label: "Collected This Month", num: `INR ${collectedThisMonth}` },
-                  { label: "Outstanding This Month", num: `INR ${outstandingThisMonth}` },
-                  { label: "Occupancy %", num: `${ownerAnalytics?.occupancy_rate ?? 0}%` },
-                  { label: "Check-ins Today", num: ownerAnalytics?.checkins_today ?? 0 },
-                  { label: "Check-outs Today", num: ownerAnalytics?.checkouts_today ?? 0 },
-                  { label: "Pending Requests", num: stats.pendingRequests },
-                ].map((stat) => (
-                <div className="stat-card" key={stat.label}>
-                  <div className="stat-num">{stat.num}</div>
-                  <div className="stat-label">{stat.label}</div>
-                </div>
-              ))}
-            </div>
-            <div className="form-section" style={{ marginTop: 18, marginBottom: 18 }}>
-              <div className="form-section-title">Room Type Occupancy</div>
-              <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-                {(ownerAnalytics?.room_type_occupancy || []).length === 0 && (
-                  <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No room occupancy data yet.</p>
-                )}
-                {(ownerAnalytics?.room_type_occupancy || []).map((item) => (
-                  <div key={item.type} className="edit-compact-card">
-                    <div style={{ fontWeight: 700, color: "var(--espresso)" }}>{item.label}</div>
-                    <div style={{ fontSize: 14, color: "var(--warm-gray)" }}>
-                      {item.occupied_beds}/{item.total_beds} beds occupied
-                    </div>
-                    <div style={{ fontWeight: 700, marginTop: 4 }}>
-                      {item.occupancy_rate}%
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="form-section" style={{ marginTop: 18, marginBottom: 18 }}>
-              <div className="form-section-title">Payment Attention</div>
-              <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
-                <div className="edit-compact-card">
-                  <div style={{ fontWeight: 700, color: "var(--espresso)" }}>Due Today</div>
-                  {dueTodayGuests.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "var(--warm-gray)" }}>No guests are due today.</div>
-                  ) : (
-                    dueTodayGuests.slice(0, 5).map((student) => (
-                      <button
-                        key={`due-today-${student.student_id}`}
-                        type="button"
-                        className="mobile-menu-item"
-                        style={{ padding: "12px 14px", background: "#fffaf3" }}
-                        onClick={() => {
-                          selectTab("students");
-                          setGuestDetailId(student.student_id);
-                        }}
-                      >
-                        {student.student_name} | INR {student.upcoming_fee_amount || "0"} | {formatDisplayDate(student.upcoming_fee_due_date)}
-                      </button>
-                    ))
-                  )}
-                </div>
-                <div className="edit-compact-card">
-                  <div style={{ fontWeight: 700, color: "#b91c1c" }}>Overdue Payments</div>
-                  {overdueGuests.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "var(--warm-gray)" }}>No overdue payments right now.</div>
-                  ) : (
-                    overdueGuests.slice(0, 5).map((student) => (
-                      <button
-                        key={`overdue-${student.student_id}`}
-                        type="button"
-                        className="mobile-menu-item"
-                        style={{ padding: "12px 14px", background: "#fff7f7", borderColor: "#fecaca", color: "#991b1b" }}
-                        onClick={() => {
-                          selectTab("students");
-                          setGuestDetailId(student.student_id);
-                        }}
-                      >
-                        {student.student_name} | INR {student.upcoming_fee_amount || "0"} | {formatDisplayDate(student.upcoming_fee_due_date)}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="form-section">
-              <div className="form-section-title">Your Listings</div>
-              {hostels.length === 0 && (
-                <div className="empty-state" style={{ padding: "28px 12px" }}>
-                  <span className="empty-icon">Listing</span>
-                  <div className="empty-title">Your listing will appear here</div>
-                  <p className="empty-sub">Once your hostel is approved, this section becomes your command center for pricing, occupancy, and guest operations.</p>
-                </div>
-              )}
-              {hostels.map((hostel) => (
-                <div
-                  key={hostel.id}
-                  style={{
-                    border: "1px solid var(--cream-dark)",
-                    borderRadius: 10,
-                    padding: 14,
-                    marginBottom: 10,
-                    background: "white",
-                  }}
-                >
-                  <div style={{ fontWeight: 700 }}>{hostel.name}</div>
-                  <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 2 }}>
-                  {hostel.location}
-                    ,{" "}
-                    {hostel.city}
-                    {" "}
-                    -
-                    {" "}
-                    {hostel.gender}
-                  </div>
-                  <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                    {hostel.address}
-                  </div>
-                  <div style={{ fontSize: 13, marginTop: 6 }}>
-                    Contact:
-                    {" "}
-                    <strong>{hostel.contact_number || "Not provided"}</strong>
-                  </div>
-                  <div style={{ fontSize: 12, marginTop: 6 }}>
-                    Amenities:
-                    {" "}
-                    {(hostel.amenities && hostel.amenities.length > 0)
-                      ? hostel.amenities.join(", ")
-                      : "Not provided"}
-                  </div>
-                  <div style={{ fontSize: 12, marginTop: 6 }}>
-                    Rooms:
-                    {" "}
-                    {(hostel.rooms && hostel.rooms.length > 0)
-                      ? hostel.rooms.map((room) =>
-                        `${room.type} - INR ${room.price} (${room.available}/${room.total} beds)`).join(", ")
-                      : "Not provided"}
-                  </div>
-                  <div style={{ fontSize: 12, marginTop: 6 }}>
-                    Photos:
-                    {" "}
-                    {hostel.images ? hostel.images.length : 0}
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 12 }}>
-                    Listing Status:
-                    {" "}
-                    <strong>{hostel.moderationStatus}</strong>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="form-section" style={{ marginTop: 18 }}>
-              <div className="form-section-title">Next Best Actions</div>
-              <div className="workflow-grid">
-                {ownerActionItems.map((item) => (
-                  <div key={item.title} className="workflow-card">
-                    <div className="workflow-card-title">{item.title}</div>
-                    <p className="workflow-card-desc">{item.desc}</p>
-                    <button className="card-cta" onClick={() => selectTab(item.tab)}>
-                      {item.cta}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
+          <OwnerOverviewTab
+            stats={stats}
+            isCompactMobile={isCompactMobile}
+            selectTab={selectTab}
+            selectedHostel={selectedHostel}
+            ownerAnalytics={ownerAnalytics}
+            ownerDefaulters={ownerDefaulters}
+            defaulterLimit={defaulterLimit}
+            setDefaulterLimit={setDefaulterLimit}
+            onToast={onToast}
+          />
         )}
-
         {activeTab === "edit" && (
           <div className="form-section">
             <div className="form-section-title">Edit Hostel / PG Details</div>
@@ -2485,76 +2323,11 @@ export default function OwnerDashboard({
 
 
         {activeTab === "enquiries" && (
-          <div className="form-section">
-            <div className="form-section-title">Booking Requests</div>
-            {requests.length === 0 && (
-              <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>
-                No booking requests yet.
-              </p>
-            )}
-            {requests.map((request) => (
-              <div
-                key={request.id}
-                style={{
-                  border: "1px solid var(--cream-dark)",
-                  borderRadius: 10,
-                  padding: 14,
-                  marginBottom: 10,
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>
-                  {request.studentName}
-                  {" "}
-                  requested
-                  {" "}
-                  {request.roomType}
-                </div>
-                {request.studentPhone && (
-                  <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                    Phone:
-                    {" "}
-                    {request.studentPhone}
-                  </div>
-                )}
-                <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                  Hostel:
-                  {" "}
-                  {request.hostelName}
-                  {" "}
-                  - Move-in:
-                  {" "}
-                  {request.moveInDate ? formatDisplayDate(request.moveInDate) : "Not set"}
-                </div>
-                {request.message && (
-                  <div style={{ marginTop: 8, fontSize: 14 }}>"{request.message}"</div>
-                )}
-                <div style={{ marginTop: 10, fontSize: 12 }}>
-                  Status:
-                  {" "}
-                  <strong>{request.status}</strong>
-                </div>
-
-                {request.status === "pending" && (
-                  <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                    <button
-                      className="card-cta"
-                      onClick={() => onRequestStatusChange(request.id, "accepted")}
-                    >
-                      Accept
-                    </button>
-                    <button
-                      className="nav-btn"
-                      onClick={() => onRequestStatusChange(request.id, "rejected")}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <OwnerEnquiriesTab
+            requests={requests}
+            onRequestStatusChange={onRequestStatusChange}
+          />
         )}
-
         {activeTab === "settings" && (
           <>
             <div className="form-section">
@@ -2805,28 +2578,12 @@ export default function OwnerDashboard({
         )}
 
         {activeTab === "leaves" && (
-          <div className="form-section">
-            <div className="form-section-title">Guest Leave Requests</div>
-            {leaves.length === 0 && <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No leave requests yet.</p>}
-            {leaves.map((leave) => (
-              <div key={leave.id} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: 14, marginBottom: 10, background: "white" }}>
-                <div style={{ fontWeight: 700 }}>{leave.student_name}</div>
-                <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                  {formatDisplayDate(leave.start_date)} to {formatDisplayDate(leave.end_date)}
-                </div>
-                {leave.reason && <div style={{ marginTop: 8, fontSize: 13 }}>"{leave.reason}"</div>}
-                <div style={{ marginTop: 8, fontSize: 12 }}>Status: <strong>{leave.status}</strong></div>
-                {leave.status === "requested" && (
-                  <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                    <button className="card-cta" onClick={() => handleLeaveStatus(leave.id, "approved")}>Approve</button>
-                    <button className="nav-btn" onClick={() => handleLeaveStatus(leave.id, "rejected")}>Reject</button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <OwnerLeavesTab
+            leaves={leaves}
+            formatDisplayDate={formatDisplayDate}
+            handleLeaveDecision={handleLeaveDecision}
+          />
         )}
-
         {activeTab === "complaints" && (
           <>
             <div className="form-section">
@@ -2874,88 +2631,22 @@ export default function OwnerDashboard({
         )}
 
         {activeTab === "reviews" && (
-          <>
-            <div className="form-section">
-              <div className="form-section-title">Review Summary</div>
-              {trustSummary?.hostel_review_summary?.length ? (
-                trustSummary.hostel_review_summary.map((item) => (
-                  <div key={item.hostel_id} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: 14, marginBottom: 10, background: "white" }}>
-                    <div style={{ fontWeight: 700 }}>{item.hostel_name}</div>
-                    <div style={{ marginTop: 6, fontSize: 13, color: "var(--warm-gray)" }}>
-                      Reviews: {item.reviews_count} | Average Rating: {item.average_rating ?? "Not enough data"} | Open Complaints: {item.open_complaints}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No published reviews yet.</p>
-              )}
-            </div>
-
-            <div className="form-section">
-              <div className="form-section-title">Review Replies</div>
-              {reviews.length === 0 && <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No reviews yet.</p>}
-              {reviews.map((review) => (
-                <div key={review.id} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: 14, marginBottom: 10, background: "white" }}>
-                  <div style={{ fontWeight: 700 }}>{review.hostel_name}</div>
-                  <div style={{ marginTop: 6, fontSize: 13, color: "var(--warm-gray)" }}>
-                    {review.student_name} | Avg Rating: {review.average_rating} | Status: {review.status}
-                  </div>
-                  {review.text && <div style={{ marginTop: 8, fontSize: 13 }}>{review.text}</div>}
-                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                    <textarea
-                      className="form-textarea"
-                      value={ownerReplies[review.id] ?? review.owner_reply ?? ""}
-                      onChange={(event) => setOwnerReplies({ ...ownerReplies, [review.id]: event.target.value })}
-                    />
-                    <button className="submit-btn" onClick={() => handleOwnerReply(review.id)}>Save Reply</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+          <OwnerReviewsTab
+            trustSummary={trustSummary}
+            reviews={reviews}
+            formatDisplayDate={formatDisplayDate}
+            handleReviewModeration={handleReviewModeration}
+          />
         )}
-
         {activeTab === "settings" && (
-          <div className="form-section">
-            <div className="form-section-title">Profile Settings</div>
-            <div style={{ display: "grid", gap: 10, fontSize: 14, marginBottom: 18 }}>
-              <div>
-                Name:
-                {" "}
-                <strong>{ownerName}</strong>
-              </div>
-              <div>
-                Phone:
-                {" "}
-                <strong>{ownerPhone || "Not provided"}</strong>
-              </div>
-              <div>
-                Role:
-                {" "}
-                <strong>{ownerRole}</strong>
-              </div>
-              <div>
-                Status:
-                {" "}
-                <strong>{ownerStatus}</strong>
-              </div>
-              {trustSummary && (
-                <div>
-                  Published Reviews:
-                  {" "}
-                  <strong>{trustSummary.published_reviews_count}</strong>
-                </div>
-              )}
-            </div>
-            <div className="card-signal-row" style={{ marginBottom: 18 }}>
-              {ownerHighlights.map((item) => (
-                <span key={item} className="card-signal">{item}</span>
-              ))}
-            </div>
-            <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>
-              More owner settings and payout preferences can be added here in the next phase.
-            </p>
-          </div>
+          <OwnerSettingsTab
+            ownerName={ownerName}
+            ownerPhone={ownerPhone}
+            ownerRole={ownerRole}
+            ownerStatus={ownerStatus}
+            trustSummary={trustSummary}
+            ownerHighlights={ownerHighlights}
+          />
         )}
       </div>
     </div>
