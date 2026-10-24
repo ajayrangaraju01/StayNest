@@ -10,7 +10,7 @@ from rest_framework.response import Response
 
 from accounts.models import StudentProfile, User
 from accounts.serializers import UserSerializer
-from ..models import Booking, FeeLedger, FeePayment, Hostel, Room, Notification
+from ..models import Booking, FeeLedger, FeePayment, Hostel, Room, Notification, Review
 from ..serializers import BookingSerializer, FeeLedgerSerializer
 from ..services.booking_services import (
     add_months_safe,

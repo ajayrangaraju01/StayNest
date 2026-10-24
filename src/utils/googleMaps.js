@@ -70,9 +70,9 @@ export function loadGoogleMapsApi() {
   return googleMapsPromise;
 }
 
-async function fetchJsonWithTimeout(url, message) {
+async function fetchJsonWithTimeout(url, message, timeoutMs = GOOGLE_MAPS_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), GOOGLE_MAPS_TIMEOUT_MS);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       signal: controller.signal,
@@ -117,6 +117,35 @@ function mapNominatimPayload(item) {
   };
 }
 
+async function geocodeWithPhoton(address) {
+  const params = new URLSearchParams({
+    q: address,
+    limit: "1",
+  });
+  const data = await fetchJsonWithTimeout(
+    `https://photon.komoot.io/api/?${params.toString()}`,
+    "Photon geocode lookup timed out.",
+    4000,
+  );
+  if (!data?.features || !data.features.length) {
+    throw new Error("Location could not be found with Photon.");
+  }
+  const f = data.features[0];
+  const p = f.properties || {};
+  const coords = f.geometry?.coordinates || [0, 0];
+  const name = p.name || p.street || p.city || address;
+  const parts = [p.district, p.city, p.state, p.country].filter(Boolean);
+  const formatted = [name, ...parts].filter(Boolean).join(", ");
+  return {
+    formattedAddress: formatted,
+    lat: Number(coords[1]),
+    lng: Number(coords[0]),
+    area: p.district || p.suburb || p.locality || p.name || "",
+    city: p.city || p.county || p.state || "",
+    pincode: p.postcode || "",
+  };
+}
+
 async function geocodeWithNominatim(address) {
   const params = new URLSearchParams({
     q: address,
@@ -152,9 +181,16 @@ async function reverseGeocodeWithNominatim(lat, lng) {
 }
 
 export async function geocodeAddress(address) {
+  // 1. Try Photon first (Instant OSM geocoder)
+  try {
+    return await geocodeWithPhoton(address);
+  } catch {}
+
+  // 2. Try Nominatim
   try {
     return await geocodeWithNominatim(address);
   } catch {
+    // 3. Fallback to Google Maps if configured
     const google = await loadGoogleMapsApi();
     const geocoder = new google.maps.Geocoder();
     return withTimeout((resolve, reject) => {
@@ -214,6 +250,47 @@ function normalizeNominatimSuggestion(item) {
   };
 }
 
+async function searchSuggestionsWithPhoton(query, near = null) {
+  const params = new URLSearchParams({
+    q: query,
+    limit: "6",
+  });
+  if (near?.lat != null && near?.lng != null) {
+    params.set("lat", String(near.lat));
+    params.set("lon", String(near.lng));
+  }
+  const data = await fetchJsonWithTimeout(
+    `https://photon.komoot.io/api/?${params.toString()}`,
+    "Photon suggestions timed out.",
+    3500,
+  );
+  if (!data?.features || !Array.isArray(data.features)) return [];
+
+  return data.features.map((f, i) => {
+    const p = f.properties || {};
+    const coords = f.geometry?.coordinates || [0, 0];
+    const lng = Number(coords[0]);
+    const lat = Number(coords[1]);
+    const name = p.name || p.street || p.city || query;
+    const parts = [p.district, p.city, p.state, p.country].filter(Boolean);
+    const secondary = parts.join(", ") || p.formatted || "";
+    const label = p.name ? (parts.length ? `${p.name}, ${parts[0]}` : p.name) : secondary;
+
+    return {
+      id: `photon-${i}-${lat}-${lng}`,
+      label: label || name,
+      secondaryText: secondary,
+      lat,
+      lng,
+      area: p.district || p.suburb || p.locality || p.name || "",
+      city: p.city || p.county || p.state || "",
+      pincode: p.postcode || "",
+      formattedAddress: [name, secondary].filter(Boolean).join(", "),
+      source: "photon",
+    };
+  });
+}
+
 async function searchSuggestionsWithNominatim(query) {
   const params = new URLSearchParams({
     q: query,
@@ -266,14 +343,23 @@ export async function searchLocationSuggestions(query, near = null) {
   const trimmed = (query || "").trim();
   if (!trimmed) return [];
 
+  // 1. Try Photon first (High speed, zero API key required, OSM-backed)
   try {
-    return await searchSuggestionsWithGoogle(trimmed, near);
+    const photonResults = await searchSuggestionsWithPhoton(trimmed, near);
+    if (photonResults.length > 0) return photonResults;
+  } catch {}
+
+  // 2. Try Google Maps Places Autocomplete if configured
+  try {
+    const googleResults = await searchSuggestionsWithGoogle(trimmed, near);
+    if (googleResults.length > 0) return googleResults;
+  } catch {}
+
+  // 3. Fallback to Nominatim
+  try {
+    return await searchSuggestionsWithNominatim(trimmed);
   } catch {
-    try {
-      return await searchSuggestionsWithNominatim(trimmed);
-    } catch {
-      return [];
-    }
+    return [];
   }
 }
 

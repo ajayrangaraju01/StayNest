@@ -1,3 +1,4 @@
+from rest_framework.decorators import action
 from datetime import date
 from django.db import models, transaction
 from django.utils import timezone
@@ -43,7 +44,7 @@ class HostelViewSet(viewsets.ModelViewSet):
     serializer_class = HostelSerializer
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve"):
+        if self.action in ("list", "retrieve", "recommendations"):
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -87,12 +88,96 @@ class HostelViewSet(viewsets.ModelViewSet):
         return super().update(request, *args, **kwargs)
 
 
+
+    @action(detail=False, methods=["get"], permission_classes=[permissions.AllowAny])
+    def recommendations(self, request):
+        lat = request.query_params.get("lat")
+        lng = request.query_params.get("lng")
+        q = request.query_params.get("q", "").strip()
+        gender = request.query_params.get("gender_type")
+
+        qs = Hostel.objects.filter(
+            moderation_status=Hostel.ModerationStatus.APPROVED,
+            is_active=True
+        ).prefetch_related("photos", "rooms", "reviews")
+
+        if gender:
+            qs = qs.filter(gender_type=gender)
+
+        if q:
+            qs = qs.filter(
+                models.Q(name__icontains=q)
+                | models.Q(area__icontains=q)
+                | models.Q(city__icontains=q)
+                | models.Q(pincode__icontains=q)
+                | models.Q(description__icontains=q)
+            )
+
+        results = []
+        parsed_lat = None
+        parsed_lng = None
+        if lat and lng:
+            try:
+                parsed_lat = float(lat)
+                parsed_lng = float(lng)
+            except ValueError:
+                pass
+
+        import math
+        def haversine(lat1, lon1, lat2, lon2):
+            if None in (lat1, lon1, lat2, lon2):
+                return None
+            R = 6371.0
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return round(R * c, 2)
+
+        for h in qs:
+            dist = None
+            if parsed_lat is not None and parsed_lng is not None and h.geo_lat and h.geo_lng:
+                dist = haversine(parsed_lat, parsed_lng, float(h.geo_lat), float(h.geo_lng))
+
+            rooms = h.rooms.all()
+            prices = [r.monthly_rent for r in rooms if r.monthly_rent]
+            daily_prices = [r.daily_rent for r in rooms if r.daily_rent]
+            starting_monthly = min(prices) if prices else None
+            starting_daily = min(daily_prices) if daily_prices else None
+            available_beds = sum(max(0, (r.total_beds or 0) - (r.occupied_beds or 0)) for r in rooms)
+
+            reviews = h.reviews.all()
+            avg_rating = 0.0
+            if reviews.exists():
+                ratings = [
+                    (r.rating_cleanliness + r.rating_food + r.rating_owner + r.rating_facilities + r.rating_value) / 5.0
+                    for r in reviews
+                ]
+                avg_rating = round(sum(ratings) / len(ratings), 1)
+
+            serialized = HostelSerializer(h).data
+            serialized["distance_km"] = dist
+            serialized["starting_monthly_rent"] = float(starting_monthly) if starting_monthly else None
+            serialized["starting_daily_rent"] = float(starting_daily) if starting_daily else None
+            serialized["available_beds"] = available_beds
+            serialized["average_rating"] = avg_rating
+            serialized["review_count"] = reviews.count()
+            results.append(serialized)
+
+        if parsed_lat is not None and parsed_lng is not None:
+            results.sort(key=lambda x: (x["distance_km"] is None, x["distance_km"] or 999999, -x["average_rating"]))
+        else:
+            results.sort(key=lambda x: (-x["average_rating"], -x["id"]))
+
+        return Response(results)
+
+
 class RoomViewSet(viewsets.ModelViewSet):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve"):
+        if self.action in ("list", "retrieve", "recommendations"):
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -340,7 +425,7 @@ class MenuViewSet(viewsets.ModelViewSet):
     serializer_class = MenuSerializer
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve"):
+        if self.action in ("list", "retrieve", "recommendations"):
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 

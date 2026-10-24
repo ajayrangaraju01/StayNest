@@ -204,7 +204,7 @@ export default function HostelDetail({
                 <div>{[hostel.location, hostel.city, hostel.pincode].filter(Boolean).join(", ")}</div>
               </div>
               <a className="detail-map-btn" href={mapLocationUrl} target="_blank" rel="noreferrer">
-                <span className="detail-map-btn-icon">-></span>
+                <span className="detail-map-btn-icon">→</span>
                 <span>Open Location on Google Maps</span>
               </a>
             </div>

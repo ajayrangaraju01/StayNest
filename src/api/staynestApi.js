@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
 function getSession() {
   try {
@@ -151,6 +151,15 @@ export async function apiDownload(path, filename = "download.csv") {
 export function fetchHostels({ useAuth = false } = {}) {
   return apiFetch("/hostels/", { skipAuth: !useAuth });
 }
+export function fetchHostelRecommendations({ lat, lng, q, gender_type } = {}) {
+  const params = new URLSearchParams();
+  if (lat != null) params.set("lat", lat);
+  if (lng != null) params.set("lng", lng);
+  if (q) params.set("q", q);
+  if (gender_type) params.set("gender_type", gender_type);
+  return apiFetch(`/hostels/recommendations/?${params.toString()}`, { skipAuth: true });
+}
+
 
 export function createHostel(payload) {
   return apiPost("/hostels/", payload);

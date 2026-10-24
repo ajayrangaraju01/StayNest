@@ -16,7 +16,15 @@ dist-ssr
 backend/staticfiles/
 backend/__pycache__/
 backend/*/__pycache__/
+**/__pycache__/
+*.py[cod]
 *.sqlite3
+
+# Local test & runner scripts with tokens or local data
+scripts/
+data/
+test_*.py
+run_*.py
 
 # Editor directories and files
 .vscode/*
