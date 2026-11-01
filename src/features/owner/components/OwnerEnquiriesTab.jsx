@@ -1,5 +1,7 @@
 export default function OwnerEnquiriesTab({
-  requests, onRequestStatusChange
+  requests = [],
+  onRequestStatusChange = () => {},
+  formatDisplayDate = (d) => d || "",
 }) {
   return (
     <>

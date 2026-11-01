@@ -41,14 +41,15 @@ export default function AppNavbar({
   onLogout,
 }) {
   const mobileTitle = useMemo(() => {
+    if (page === "landing") return "StayNest";
     if (page === "detail" && selectedHostel) return selectedHostel.name;
-    if (page === "student") return "My Stay";
+    if (page === "student") return "Tenant Portal";
     if (page === "owner") return "Owner Dashboard";
-    if (page === "admin") return "Admin Dashboard";
+    if (page === "admin") return "Security & Compliance";
     if (page === "auth") {
       if (authRole === "owner") return "Owner Access";
-      if (authRole === "admin") return "Admin Access";
-      return "Guest Access";
+      if (authRole === "admin") return "Staff Access";
+      return "Tenant Access";
     }
     return "Browse Hostels";
   }, [page, selectedHostel, authRole]);

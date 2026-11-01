@@ -120,11 +120,14 @@ function mapHostelForUi(hostel, rooms, menu = DEFAULT_MENU) {
 }
 
 export async function getHostels({ useAuth = false } = {}) {
-  const [hostels, rooms, menus] = await Promise.all([
+  const results = await Promise.allSettled([
     fetchHostels({ useAuth }),
     fetchRooms({ useAuth }),
-    fetchMenus({ useAuth }).catch(() => []),
+    fetchMenus({ useAuth }),
   ]);
+  const hostels = results[0].status === "fulfilled" ? results[0].value || [] : [];
+  const rooms = results[1].status === "fulfilled" ? results[1].value || [] : [];
+  const menus = results[2].status === "fulfilled" ? results[2].value || [] : [];
   const roomsByHostel = rooms.reduce((acc, room) => {
     const list = acc[room.hostel] || [];
     list.push(room);
@@ -241,7 +244,9 @@ function mapBookingStatusToApi(status) {
 
 export async function getOwnerBookingRequests(ownerId, hostels = []) {
   const ownerHostelIds = new Set(hostels.filter((hostel) => hostel.ownerId === ownerId).map((h) => h.id));
-  const [bookings, rooms] = await Promise.all([fetchBookings(), fetchRooms({ useAuth: true })]);
+  const results = await Promise.allSettled([fetchBookings(), fetchRooms({ useAuth: true })]);
+  const bookings = results[0].status === "fulfilled" ? results[0].value || [] : [];
+  const rooms = results[1].status === "fulfilled" ? results[1].value || [] : [];
   const roomTypeById = rooms.reduce((acc, room) => {
     acc[room.id] = ROOM_TYPE_TO_UI[room.type] || room.type;
     return acc;
@@ -268,7 +273,9 @@ export async function getOwnerBookingRequests(ownerId, hostels = []) {
 }
 
 export async function getStudentBookingRequests(studentId, hostels = []) {
-  const [bookings, rooms] = await Promise.all([fetchBookings(), fetchRooms()]);
+  const results = await Promise.allSettled([fetchBookings(), fetchRooms()]);
+  const bookings = results[0].status === "fulfilled" ? results[0].value || [] : [];
+  const rooms = results[1].status === "fulfilled" ? results[1].value || [] : [];
   const roomTypeById = rooms.reduce((acc, room) => {
     acc[room.id] = ROOM_TYPE_TO_UI[room.type] || room.type;
     return acc;

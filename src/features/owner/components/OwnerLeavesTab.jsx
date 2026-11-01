@@ -1,5 +1,7 @@
 export default function OwnerLeavesTab({
-  leaves, formatDisplayDate, handleLeaveDecision
+  leaves = [],
+  formatDisplayDate = (d) => d || "",
+  handleLeaveDecision = () => {},
 }) {
   return (
     <>
@@ -16,8 +18,8 @@ export default function OwnerLeavesTab({
                 <div style={{ marginTop: 8, fontSize: 12 }}>Status: <strong>{leave.status}</strong></div>
                 {leave.status === "requested" && (
                   <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                    <button className="card-cta" onClick={() => handleLeaveStatus(leave.id, "approved")}>Approve</button>
-                    <button className="nav-btn" onClick={() => handleLeaveStatus(leave.id, "rejected")}>Reject</button>
+                    <button className="card-cta" onClick={() => handleLeaveDecision(leave.id, "approved")}>Approve</button>
+                    <button className="nav-btn" onClick={() => handleLeaveDecision(leave.id, "rejected")}>Reject</button>
                   </div>
                 )}
               </div>

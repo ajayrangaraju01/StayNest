@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import HostelCard from "../components/HostelCard";
+import BankUpiModal from "../components/BankUpiModal";
+import RentReceiptModal from "../components/RentReceiptModal";
 import {
   createReview,
   fetchComplaints,
@@ -91,6 +93,9 @@ export default function StudentDashboard({ hostels, onHostelClick, requests = []
   const [complaints, setComplaints] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [trustSummary, setTrustSummary] = useState(null);
+  const [activePaymentLedger, setActivePaymentLedger] = useState(null);
+  const [receiptModalLedger, setReceiptModalLedger] = useState(null);
+  const [receiptModalPayment, setReceiptModalPayment] = useState(null);
   const [profileForm, setProfileForm] = useState({
     name: "",
     phone: "",
@@ -153,18 +158,17 @@ export default function StudentDashboard({ hostels, onHostelClick, requests = []
   useEffect(() => {
     const loadOps = async () => {
       try {
-        const [ledgerData, menuData, leaveData] = await Promise.all([
+        const results = await Promise.allSettled([
           fetchFeeLedgers(),
           fetchMenus(),
           fetchLeaves(),
         ]);
-        setFeeLedgers(ledgerData || []);
-        setMenus(menuData || []);
-        setLeaves(leaveData || []);
+        const [ledgerRes, menuRes, leaveRes] = results;
+        if (ledgerRes.status === "fulfilled") setFeeLedgers(ledgerRes.value || []);
+        if (menuRes.status === "fulfilled") setMenus(menuRes.value || []);
+        if (leaveRes.status === "fulfilled") setLeaves(leaveRes.value || []);
       } catch {
-        setFeeLedgers([]);
-        setMenus([]);
-        setLeaves([]);
+        // Fallback already handled per-promise
       }
     };
     loadOps();
@@ -173,18 +177,17 @@ export default function StudentDashboard({ hostels, onHostelClick, requests = []
   useEffect(() => {
     const loadTrustAndFeedback = async () => {
       try {
-        const [trustData, complaintData, reviewData] = await Promise.all([
+        const results = await Promise.allSettled([
           fetchTrustSummary(),
           fetchComplaints(),
           fetchReviews(),
         ]);
-        setTrustSummary(trustData);
-        setComplaints(complaintData || []);
-        setReviews(reviewData || []);
+        const [trustRes, complaintRes, reviewRes] = results;
+        if (trustRes.status === "fulfilled") setTrustSummary(trustRes.value);
+        if (complaintRes.status === "fulfilled") setComplaints(complaintRes.value || []);
+        if (reviewRes.status === "fulfilled") setReviews(reviewRes.value || []);
       } catch {
-        setTrustSummary(null);
-        setComplaints([]);
-        setReviews([]);
+        // Fallback already handled per-promise
       }
     };
     loadTrustAndFeedback();
@@ -475,7 +478,40 @@ export default function StudentDashboard({ hostels, onHostelClick, requests = []
             {dueCountdown && <div style={{ fontSize: 13, color: "var(--warm-gray)" }}>{dueCountdown}</div>}
             <div>Amount Due: <strong>INR {upcomingFee.amount_due}</strong></div>
             <div>Amount Paid: <strong>INR {upcomingFee.amount_paid}</strong></div>
-            <div>Status: <strong>{upcomingFee.status}</strong></div>
+            <div>Status: <strong style={{ textTransform: "capitalize" }}>{upcomingFee.status}</strong></div>
+            {upcomingFee.status !== "paid" && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="submit-btn"
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 13,
+                    background: "var(--forest, #1e3a1e)",
+                    color: "#ffffff",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    borderRadius: 8,
+                    border: "none",
+                  }}
+                  onClick={() => {
+                    const match = feeLedgers.find((l) => l.id === upcomingFee.id) || {
+                      id: upcomingFee.id,
+                      hostel_name: hostel?.name,
+                      amount_due: upcomingFee.amount_due,
+                      amount_paid: upcomingFee.amount_paid,
+                      status: upcomingFee.status,
+                      upi_id: upcomingFee.upi_id || (hostel?.contact_number ? `${hostel.contact_number.replace(/\D/g, "").slice(-10)}@upi` : "staynest@bank"),
+                    };
+                    setActivePaymentLedger(match);
+                  }}
+                >
+                  <span>⚡ Pay ₹{Math.max(0, Number(upcomingFee.amount_due || 0) - Number(upcomingFee.amount_paid || 0)).toLocaleString("en-IN")} via Bank UPI</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -485,24 +521,119 @@ export default function StudentDashboard({ hostels, onHostelClick, requests = []
         {feeLedgers.length === 0 && (
           <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No fee ledger entries yet.</p>
         )}
-        {feeLedgers.map((ledger) => (
-          <div
-            key={ledger.id}
-            style={{
-              border: "1px solid var(--cream-dark)",
-              borderRadius: 10,
-              padding: 14,
-              marginBottom: 10,
-              background: "white",
-            }}
-          >
-            <div style={{ fontWeight: 700 }}>{formatDate(ledger.month)}</div>
-            <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-              Due INR {ledger.amount_due} | Paid INR {ledger.amount_paid} | Due date {formatDate(ledger.due_date)}
+        {feeLedgers.map((ledger) => {
+          const outstanding = Math.max(0, (Number(ledger.amount_due || 0) + Number(ledger.late_fee || 0)) - Number(ledger.amount_paid || 0));
+          return (
+            <div
+              key={ledger.id}
+              style={{
+                border: "1px solid var(--cream-dark)",
+                borderRadius: 10,
+                padding: 14,
+                marginBottom: 10,
+                background: "white",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{formatDate(ledger.month)}</div>
+                  <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
+                    Due INR {ledger.amount_due} | Paid INR {ledger.amount_paid} | Due date {formatDate(ledger.due_date)}
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 12 }}>
+                    Status: <strong style={{ textTransform: "capitalize" }}>{ledger.status}</strong>
+                  </div>
+                </div>
+                {ledger.status !== "paid" && (
+                  <button
+                    type="button"
+                    className="submit-btn"
+                    style={{
+                      padding: "6px 14px",
+                      fontSize: 12,
+                      background: "var(--forest, #1e3a1e)",
+                      color: "#ffffff",
+                      borderRadius: 6,
+                      border: "none",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                    onClick={() => setActivePaymentLedger(ledger)}
+                  >
+                    <span>Pay ₹{outstanding.toLocaleString("en-IN")} via UPI QR</span>
+                  </button>
+                )}
+                {ledger.status === "paid" && (
+                  <button
+                    type="button"
+                    className="nav-btn"
+                    style={{
+                      padding: "6px 14px",
+                      fontSize: 12,
+                      borderColor: "var(--forest, #1e3a1e)",
+                      color: "var(--forest, #1e3a1e)",
+                      fontWeight: 600,
+                    }}
+                    onClick={() => {
+                      setReceiptModalLedger(ledger);
+                      setReceiptModalPayment(ledger.payments?.[0] || null);
+                    }}
+                  >
+                    📄 Official Rent Receipt
+                  </button>
+                )}
+              </div>
+
+              {ledger.payments?.length > 0 && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--cream-dark)", display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--warm-gray)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    Payment Transactions:
+                  </div>
+                  {ledger.payments.map((p) => (
+                    <div
+                      key={p.id}
+                      style={{
+                        fontSize: 12,
+                        padding: "6px 10px",
+                        background: "var(--cream-soft, #f7f5f0)",
+                        borderRadius: 6,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 6,
+                      }}
+                    >
+                      <div>
+                        <strong>₹{Number(p.amount).toLocaleString("en-IN")}</strong> via {p.mode?.toUpperCase()} on {formatDateTime(p.paid_at)}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {p.reference_id && (
+                          <div style={{ fontFamily: "monospace", fontSize: 11, background: "#ffffff", padding: "2px 6px", borderRadius: 4, border: "1px solid var(--cream-dark)" }}>
+                            UTR: {p.reference_id}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          className="nav-btn"
+                          style={{ fontSize: 11, padding: "2px 8px" }}
+                          onClick={() => {
+                            setReceiptModalLedger(ledger);
+                            setReceiptModalPayment(p);
+                          }}
+                        >
+                          Receipt 📄
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div style={{ marginTop: 8, fontSize: 12 }}>Status: <strong>{ledger.status}</strong></div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="form-section" style={{ marginTop: 24 }}>
@@ -785,6 +916,45 @@ export default function StudentDashboard({ hostels, onHostelClick, requests = []
           </div>
         ))}
       </div>
+
+      {activePaymentLedger && (
+        <BankUpiModal
+          isOpen={Boolean(activePaymentLedger)}
+          ledger={activePaymentLedger}
+          hostelName={activePaymentLedger.hostel_name || hostel?.name}
+          upiId={activePaymentLedger.upi_id}
+          amountDue={Math.max(
+            0,
+            (Number(activePaymentLedger.amount_due || 0) + Number(activePaymentLedger.late_fee || 0)) -
+              Number(activePaymentLedger.amount_paid || 0)
+          )}
+          onClose={() => setActivePaymentLedger(null)}
+          onSuccess={async () => {
+            try {
+              const results = await Promise.allSettled([
+                fetchFeeLedgers(),
+                fetchStudentOverview(),
+              ]);
+              const [ledgerRes, overviewRes] = results;
+              if (ledgerRes.status === "fulfilled") setFeeLedgers(ledgerRes.value || []);
+              if (overviewRes.status === "fulfilled" && overviewRes.value) setOverview(overviewRes.value);
+            } catch (err) {
+              console.error("Refresh ledgers error:", err);
+            }
+          }}
+          onToast={onToast}
+        />
+      )}
+
+      <RentReceiptModal
+        isOpen={Boolean(receiptModalLedger)}
+        ledger={receiptModalLedger}
+        payment={receiptModalPayment}
+        onClose={() => {
+          setReceiptModalLedger(null);
+          setReceiptModalPayment(null);
+        }}
+      />
     </div>
   );
 }

@@ -25,6 +25,10 @@
   --radius-sm: 8px;
 }
 
+html, body {
+  overflow-x: clip;
+}
+
 body {
   font-family: "Plus Jakarta Sans", sans-serif;
   background: var(--cream);
@@ -98,7 +102,7 @@ h3,
   font-weight: 500;
   cursor: pointer;
   border: none;
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
   background: transparent;
   color: var(--espresso-mid);
 }
@@ -242,7 +246,11 @@ h3,
   font-weight: 700;
 }
 
-.notification-item-body {
+.notification-item-html, body {
+  overflow-x: clip;
+}
+
+body {
   margin-top: 6px;
   font-size: 13px;
   color: var(--warm-gray);
@@ -397,7 +405,7 @@ h3,
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
   white-space: nowrap;
 }
 
@@ -569,7 +577,7 @@ h3,
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .filter-chip:hover,
@@ -598,7 +606,7 @@ h3,
   overflow: hidden;
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: all 0.3s;
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
   border: 1px solid rgba(193, 68, 14, 0.08);
 }
 
@@ -667,7 +675,11 @@ h3,
   gap: 4px;
 }
 
-.card-body {
+.card-html, body {
+  overflow-x: clip;
+}
+
+body {
   padding: 20px;
 }
 
@@ -811,7 +823,7 @@ h3,
   border-radius: 8px;
   font-weight: 600;
   font-size: 13px;
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .card-cta:hover {
@@ -922,7 +934,11 @@ h3,
   display: block;
 }
 
-.detail-body {
+.detail-html, body {
+  overflow-x: clip;
+}
+
+body {
   max-width: 1200px;
   margin: 0 auto;
   padding: 40px 32px;
@@ -1058,7 +1074,7 @@ h3,
   background: white;
   border-radius: 12px;
   border: 1.5px solid var(--cream-dark);
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .room-card:hover {
@@ -1098,6 +1114,13 @@ h3,
   margin-top: 2px;
 }
 
+.room-card-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
 .room-price-wrap {
   text-align: right;
 }
@@ -1126,7 +1149,7 @@ h3,
   font-size: 13px;
   margin-left: 16px;
   white-space: nowrap;
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .room-book-btn:hover {
@@ -1290,7 +1313,7 @@ h3,
   font-size: 16px;
   font-family: "Plus Jakarta Sans", sans-serif;
   box-shadow: 0 8px 24px rgba(193, 68, 14, 0.35);
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .book-now-btn:hover {
@@ -1345,7 +1368,7 @@ h3,
   font-size: 14px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.6);
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
   border-left: 3px solid transparent;
 }
 
@@ -1555,7 +1578,11 @@ h3,
   font-weight: 700;
 }
 
-.edit-collapsible-body {
+.edit-collapsible-html, body {
+  overflow-x: clip;
+}
+
+body {
   padding: 16px 18px 18px;
   border-top: 1px solid var(--cream-dark);
 }
@@ -1688,7 +1715,7 @@ h3,
   border-radius: 12px;
   padding: 16px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
   text-align: center;
   background: var(--cream);
 }
@@ -1786,7 +1813,7 @@ h3,
   text-align: center;
   cursor: pointer;
   background: var(--cream);
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
   margin-bottom: 20px;
 }
 
@@ -1861,7 +1888,7 @@ h3,
     linear-gradient(135deg, rgba(193, 68, 14, 0.08), rgba(244, 160, 42, 0.08)),
     var(--white);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .photo-upload-shell:hover {
@@ -1922,7 +1949,7 @@ h3,
   font-size: 15px;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(193, 68, 14, 0.3);
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1950,7 +1977,7 @@ h3,
   z-index: 1000;
   transform: translateY(0);
   opacity: 1;
-  transition: all 0.3s;
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
   border-left: 4px solid var(--sage);
   animation: slideIn 0.3s ease;
 }
@@ -2066,7 +2093,7 @@ h3,
   font-family: "Plus Jakarta Sans", sans-serif;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: all 0.2s;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .cta-btn:hover {
@@ -2579,7 +2606,11 @@ h3,
     gap: 18px;
   }
 
-  .card-body {
+  .card-html, body {
+  overflow-x: clip;
+}
+
+body {
     padding: 18px;
   }
 
@@ -2614,7 +2645,11 @@ h3,
     height: 64px;
   }
 
-  .detail-body {
+  .detail-html, body {
+  overflow-x: clip;
+}
+
+body {
     padding: 24px 16px 104px;
   }
 
@@ -2729,6 +2764,15 @@ h3,
     width: 100%;
   }
 
+  .room-card-right {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+  }
+
   .room-book-btn {
     margin-left: 0;
   }
@@ -2824,13 +2868,18 @@ h3,
   }
 
   .card-footer {
-    flex-direction: column;
-    align-items: flex-start;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
     gap: 12px;
   }
 
   .card-cta {
-    width: 100%;
+    width: auto;
+    padding: 10px 18px;
+    font-size: 13px;
+    white-space: nowrap;
   }
 
   .mobile-quick-grid {
@@ -2851,5 +2900,694 @@ h3,
     right: 12px;
     left: 12px;
     bottom: 12px;
+  }
+}
+
+
+:focus-visible {
+  outline: 2px solid var(--terra);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* ==========================================================================
+   StayNest Hallmark Craft: Landing Page & Dedicated Role Navigation
+   ========================================================================== */
+
+.landing-page {
+  min-height: 100vh;
+  background: var(--cream);
+  color: var(--espresso);
+  overflow-x: clip;
+}
+
+.landing-masthead {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(251, 247, 240, 0.94);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(193, 68, 14, 0.12);
+  padding: 0 32px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-masthead-inner {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.landing-brand {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 27px;
+  font-weight: 700;
+  color: var(--terra);
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.landing-brand span {
+  color: var(--espresso);
+}
+
+.brand-descriptor {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warm-gray);
+  letter-spacing: 0.03em;
+  margin-left: 10px;
+  border-left: 1px solid rgba(140, 123, 114, 0.35);
+  padding-left: 10px;
+  display: inline-block;
+}
+
+.landing-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.landing-nav-link {
+  background: none;
+  border: none;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--espresso-mid);
+  cursor: pointer;
+  text-decoration: none;
+  padding: 6px 0;
+  transition: color 160ms ease;
+}
+
+.landing-nav-link:hover {
+  color: var(--terra);
+}
+
+.landing-masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-primary-landing {
+  background: var(--terra);
+  color: var(--white);
+  border: 1px solid var(--terra);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.btn-primary-landing:hover {
+  background: var(--terra-light);
+  transform: translateY(-1px);
+}
+
+.btn-primary-landing.full-width {
+  width: 100%;
+  padding: 13px 20px;
+  font-size: 15px;
+}
+
+.btn-outline-landing {
+  background: transparent;
+  color: var(--espresso);
+  border: 1px solid rgba(28, 15, 7, 0.25);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.btn-outline-landing:hover {
+  border-color: var(--terra);
+  color: var(--terra);
+  background: rgba(193, 68, 14, 0.04);
+}
+
+/* Landing Hero */
+.landing-hero {
+  padding: 88px 24px 64px;
+  max-width: 980px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.landing-kicker {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terra);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.landing-hero-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: clamp(38px, 6vw, 64px);
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--espresso);
+  margin-bottom: 24px;
+  letter-spacing: -0.01em;
+}
+
+.landing-hero-subtitle {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--espresso-mid);
+  max-width: 720px;
+  margin: 0 auto 36px;
+  font-weight: 400;
+}
+
+.landing-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.hero-cta {
+  padding: 14px 28px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+
+.landing-hero-footnote {
+  font-size: 14px;
+  color: var(--warm-gray);
+}
+
+.landing-text-link {
+  background: none;
+  border: none;
+  color: var(--terra);
+  font-weight: 600;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  cursor: pointer;
+  padding: 0 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Landing Strip */
+.landing-strip {
+  background: var(--cream-dark);
+  border-top: 1px solid rgba(193, 68, 14, 0.12);
+  border-bottom: 1px solid rgba(193, 68, 14, 0.12);
+  padding: 48px 24px;
+  margin: 40px 0 60px;
+}
+
+.landing-strip-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 32px;
+}
+
+.strip-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.strip-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--terra);
+}
+
+.strip-value {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.strip-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--espresso-mid);
+  margin: 0;
+}
+
+/* Landing Ecosystems (Divided Users) */
+.landing-ecosystems {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 60px 24px 80px;
+}
+
+.landing-section-header {
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto 48px;
+}
+
+.landing-section-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: clamp(30px, 4vw, 44px);
+  font-weight: 700;
+  color: var(--espresso);
+  margin-bottom: 12px;
+  line-height: 1.2;
+}
+
+.landing-section-subtitle {
+  font-size: 16px;
+  color: var(--espresso-mid);
+  line-height: 1.6;
+}
+
+.ecosystem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 36px;
+  margin-bottom: 48px;
+}
+
+.ecosystem-card {
+  background: var(--white);
+  border: 1px solid rgba(193, 68, 14, 0.15);
+  border-radius: var(--radius);
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow);
+  position: relative;
+}
+
+.tenant-card {
+  border-top: 4px solid var(--terra);
+}
+
+.owner-card {
+  border-top: 4px solid var(--sage);
+}
+
+.role-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  margin-bottom: 14px;
+}
+
+.tenant-tag {
+  background: rgba(193, 68, 14, 0.1);
+  color: var(--terra);
+}
+
+.owner-tag {
+  background: rgba(107, 143, 113, 0.15);
+  color: #2e5934;
+}
+
+.ecosystem-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--espresso);
+  margin-bottom: 12px;
+}
+
+.ecosystem-desc {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--espresso-mid);
+  margin-bottom: 24px;
+}
+
+.ecosystem-feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ecosystem-feature-item {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--espresso-mid);
+  padding-left: 20px;
+  position: relative;
+}
+
+.ecosystem-feature-item::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--terra);
+  font-weight: bold;
+}
+
+.security-assurance-box {
+  background: var(--espresso);
+  color: var(--cream);
+  border-radius: var(--radius);
+  padding: 32px 36px;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.security-badge {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.security-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--white);
+  margin-bottom: 8px;
+}
+
+.security-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(251, 247, 240, 0.85);
+  margin: 0;
+}
+
+/* Showcase & Standards */
+.landing-showcase {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.landing-hostels-grid {
+  margin-bottom: 36px;
+}
+
+.landing-showcase-footer {
+  text-align: center;
+}
+
+.landing-standards {
+  background: var(--cream-dark);
+  border-top: 1px solid rgba(193, 68, 14, 0.12);
+  padding: 80px 24px;
+}
+
+.standards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.standard-item {
+  background: var(--white);
+  border: 1px solid rgba(193, 68, 14, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(28, 15, 7, 0.04);
+}
+
+.standard-num {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--terra);
+  margin-bottom: 8px;
+}
+
+.standard-heading {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--espresso);
+  margin-bottom: 8px;
+}
+
+.standard-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--espresso-mid);
+  margin: 0;
+}
+
+/* Footer */
+.landing-footer {
+  background: var(--espresso);
+  color: var(--cream);
+  padding: 64px 24px 32px;
+}
+
+.landing-footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 48px;
+}
+
+@media (max-width: 800px) {
+  .landing-footer-inner {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+.footer-brand {
+  font-size: 32px;
+  color: var(--terra-light);
+  margin-bottom: 12px;
+}
+
+.footer-tagline {
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(251, 247, 240, 0.7);
+  max-width: 320px;
+  margin-bottom: 16px;
+}
+
+.footer-contact {
+  font-size: 13px;
+  color: rgba(251, 247, 240, 0.5);
+}
+
+.footer-col-title {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--white);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 16px;
+}
+
+.footer-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.footer-link-btn {
+  background: none;
+  border: none;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 14px;
+  color: rgba(251, 247, 240, 0.75);
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+.footer-link-btn:hover {
+  color: var(--white);
+}
+
+.staff-portal-link {
+  color: rgba(251, 247, 240, 0.35);
+  font-size: 12px;
+}
+
+.staff-portal-link:hover {
+  color: var(--terra-light);
+  text-decoration: underline;
+}
+
+.footer-text-muted {
+  font-size: 13px;
+  color: rgba(251, 247, 240, 0.5);
+}
+
+.footer-bottom-bar {
+  max-width: 1200px;
+  margin: 0 auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 24px;
+  font-size: 12px;
+  color: rgba(251, 247, 240, 0.5);
+  text-align: center;
+}
+
+/* Auth Role Tabs & Security Banner */
+.auth-role-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.auth-role-tab {
+  background: var(--cream);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.auth-role-tab:hover {
+  background: var(--cream-dark);
+}
+
+.auth-role-tab.active {
+  background: var(--white);
+  border-color: var(--terra);
+  box-shadow: 0 2px 8px rgba(193, 68, 14, 0.12);
+}
+
+.role-tab-title {
+  display: block;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--espresso);
+  margin-bottom: 2px;
+}
+
+.role-tab-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--warm-gray);
+}
+
+.admin-security-banner {
+  background: #fdf3eb;
+  border: 1px solid var(--terra);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--espresso);
+}
+
+.admin-security-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.admin-security-banner strong {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 2px;
+  color: var(--terra);
+}
+
+.admin-security-banner p {
+  margin: 0;
+  color: var(--espresso-mid);
+}
+
+@media (max-width: 768px) {
+  .landing-masthead {
+    padding: 0 16px;
+  }
+  .brand-descriptor {
+    display: none;
+  }
+  .landing-nav-links {
+    display: none;
+  }
+  .landing-hero {
+    padding: 48px 16px 40px;
+  }
+  .ecosystem-grid {
+    grid-template-columns: 1fr;
+  }
+  .ecosystem-card {
+    padding: 28px 20px;
+  }
+  .security-assurance-box {
+    flex-direction: column;
+    padding: 24px 20px;
   }
 }

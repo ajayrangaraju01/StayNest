@@ -39,7 +39,7 @@ export default function AdminDashboard({ adminName, onLogout, onToast, initialTa
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [overviewData, ownersData, allOwnersData, hostelsData, allHostelsData, complaintData, reviewData, trustData] = await Promise.all([
+      const results = await Promise.allSettled([
         fetchAdminOverview(),
         fetchAdminOwners(),
         fetchAdminAllOwners(),
@@ -49,14 +49,24 @@ export default function AdminDashboard({ adminName, onLogout, onToast, initialTa
         fetchReviews(),
         fetchTrustSummary(),
       ]);
-      setOverview(overviewData);
-      setOwners(ownersData || []);
-      setAllOwners(allOwnersData || []);
-      setHostels(hostelsData || []);
-      setAllHostels(allHostelsData || []);
-      setComplaints(complaintData || []);
-      setReviews(reviewData || []);
-      setTrustSummary(trustData);
+      const [
+        overviewRes,
+        ownersRes,
+        allOwnersRes,
+        hostelsRes,
+        allHostelsRes,
+        complaintRes,
+        reviewRes,
+        trustRes,
+      ] = results;
+      if (overviewRes.status === "fulfilled") setOverview(overviewRes.value);
+      if (ownersRes.status === "fulfilled") setOwners(ownersRes.value || []);
+      if (allOwnersRes.status === "fulfilled") setAllOwners(allOwnersRes.value || []);
+      if (hostelsRes.status === "fulfilled") setHostels(hostelsRes.value || []);
+      if (allHostelsRes.status === "fulfilled") setAllHostels(allHostelsRes.value || []);
+      if (complaintRes.status === "fulfilled") setComplaints(complaintRes.value || []);
+      if (reviewRes.status === "fulfilled") setReviews(reviewRes.value || []);
+      if (trustRes.status === "fulfilled") setTrustSummary(trustRes.value);
     } catch (error) {
       onToast(error.message || "Unable to load admin dashboard.");
     } finally {

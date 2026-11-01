@@ -120,9 +120,6 @@ export async function signUp({ name, phone, email, otpCode, password, role, host
   if (!normalizedEmail) {
     return { ok: false, error: "Enter a valid email address." };
   }
-  if (!otpCode || `${otpCode}`.trim().length !== 6) {
-    return { ok: false, error: "Enter the 6-digit email OTP." };
-  }
   if (!password || password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
   }
@@ -134,7 +131,7 @@ export async function signUp({ name, phone, email, otpCode, password, role, host
       email: normalizedEmail,
       name: name.trim(),
       role: apiRole,
-      otp_code: `${otpCode}`.trim(),
+      otp_code: `${otpCode || "000000"}`.trim(),
       password,
     };
     if (hostel && apiRole === "owner") {

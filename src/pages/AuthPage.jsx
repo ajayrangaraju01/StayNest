@@ -4,18 +4,36 @@ import MapPickerModal from "../components/MapPickerModal";
 import { geocodeAddress, reverseGeocodeLatLng } from "../utils/googleMaps";
 
 const ROLE_META = {
-  owner: { title: "Hostel Owner", subtitle: "Manage listings, menus, enquiries, and bookings." },
-  guest: { title: "Guest", subtitle: "Find hostels and send booking requests." },
-  admin: { title: "Admin", subtitle: "Moderate owners, hostels, and platform activity." },
+  owner: {
+    badge: "Owner Portal",
+    title: "Property Owner Sign In",
+    subtitle: "Manage your property listings, room allocations, food menu, and guest billing.",
+    testEmail: "owner@staynest.local",
+    testPass: "owner123",
+  },
+  guest: {
+    badge: "Tenant Portal",
+    title: "Tenant Sign In",
+    subtitle: "Explore verified hostels, view booking status, and request room stays.",
+    testEmail: "student@staynest.local",
+    testPass: "student123",
+  },
+  admin: {
+    badge: "Staff Only",
+    title: "StayNest Staff & Admin Portal",
+    subtitle: "Restricted administrative session for platform verification, moderation, and auditing.",
+    testEmail: "admin@staynest.local",
+    testPass: "admin123",
+  },
 };
 
 export default function AuthPage({
   defaultRole = "guest",
   onBack,
   onSuccess,
-  hideGuest = false,
-  hideOwner = false,
-  lockRole = false,
+  _hideGuest = false,
+  _hideOwner = false,
+  _lockRole = false,
 }) {
   const {
     login,
@@ -59,14 +77,8 @@ export default function AuthPage({
   const isAdminAuth = role === "admin";
 
   useEffect(() => {
-    if (lockRole) return;
-    if (hideGuest && role !== "owner") {
-      setRole("owner");
-    }
-    if (hideOwner && role !== "guest") {
-      setRole("guest");
-    }
-  }, [hideGuest, hideOwner, lockRole, role]);
+    setRole(defaultRole);
+  }, [defaultRole]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -270,24 +282,36 @@ export default function AuthPage({
           <p className="auth-sub">{ROLE_META[role].subtitle}</p>
         </div>
 
-        {!lockRole && !hideGuest && !hideOwner && (
-          <div className="auth-toggle-row">
-            <button
-              className={`filter-chip${role === "guest" ? " active" : ""}`}
-              onClick={() => setRole("guest")}
-              type="button"
-            >
-              Guest
-            </button>
-            <button
-              className={`filter-chip${role === "owner" ? " active" : ""}`}
-              onClick={() => setRole("owner")}
-              type="button"
-            >
-              Hostel Owner
-            </button>
+        {isAdminAuth && (
+          <div className="admin-security-banner">
+            <div className="admin-security-icon">🔒</div>
+            <div>
+              <strong>Staff Compliance &amp; Moderation Access</strong>
+              <p>Restricted administrative session for platform auditing, KYC verification, and dispute resolution.</p>
+            </div>
           </div>
         )}
+
+        <div style={{ background: "rgba(185, 103, 68, 0.08)", border: "1px solid rgba(185, 103, 68, 0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "var(--espresso)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <span style={{ fontWeight: 600 }}>Default Login:</span> {ROLE_META[role].testEmail}
+            <span style={{ color: "var(--warm-gray)", marginLeft: 6 }}>({ROLE_META[role].testPass})</span>
+          </div>
+          <button
+            type="button"
+            className="nav-btn"
+            style={{ padding: "4px 10px", fontSize: 12, height: "auto" }}
+            onClick={() => {
+              setForm((prev) => ({
+                ...prev,
+                email: ROLE_META[role].testEmail,
+                password: ROLE_META[role].testPass,
+              }));
+            }}
+          >
+            Auto-fill
+          </button>
+        </div>
 
         {!isAdminAuth && (
           <div className="auth-toggle-row">
@@ -303,7 +327,7 @@ export default function AuthPage({
               }}
               type="button"
             >
-              Login
+              {role === "owner" ? "Owner Sign In" : "Tenant Sign In"}
             </button>
             <button
               className={`filter-chip${mode === "signup" ? " active" : ""}`}
@@ -317,7 +341,7 @@ export default function AuthPage({
               }}
               type="button"
             >
-              Sign Up
+              {role === "owner" ? "List Property / Sign Up" : "Create Tenant Account"}
             </button>
           </div>
         )}
@@ -373,31 +397,6 @@ export default function AuthPage({
                     <option value="female">Female</option>
                     <option value="other">Other / Prefer Co-Live</option>
                   </select>
-                </div>
-              )}
-
-              <div className="auth-otp-row">
-                <input
-                  className="form-input"
-                  value={form.otpCode}
-                  onChange={(event) => setForm({ ...form, otpCode: event.target.value })}
-                  placeholder="Enter 6-digit email OTP"
-                  inputMode="numeric"
-                  maxLength={6}
-                />
-                <button
-                  className="nav-btn auth-otp-btn"
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={otpBusy}
-                >
-                  {otpBusy ? "Sending..." : "Send OTP"}
-                </button>
-              </div>
-
-              {otpSent && (
-                <div className="auth-info">
-                  OTP sent to your email. It is valid for 10 minutes.
                 </div>
               )}
             </>
@@ -698,8 +697,8 @@ export default function AuthPage({
                 : recoveryMode === "reset"
                   ? "Change Password"
                   : mode === "login"
-                    ? "Login"
-                    : "Create Account"}
+                    ? (role === "owner" ? "Sign In as Property Owner" : role === "admin" ? "Sign In as Administrator" : "Sign In as Tenant")
+                    : (role === "owner" ? "Register Property & Host" : "Create Tenant Account")}
           </button>
         </form>
       </div>

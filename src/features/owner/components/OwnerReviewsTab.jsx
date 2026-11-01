@@ -1,5 +1,9 @@
 export default function OwnerReviewsTab({
-  trustSummary, reviews, formatDisplayDate, handleReviewModeration
+  trustSummary = {},
+  reviews = [],
+  ownerReplies = {},
+  setOwnerReplies = () => {},
+  handleOwnerReply = () => {},
 }) {
   return (
     <>

@@ -1,33 +1,56 @@
 export default function OwnerOverviewTab({
-  stats, isCompactMobile, selectTab, selectedHostel, ownerAnalytics, ownerDefaulters, defaulterLimit, setDefaulterLimit, onToast
+  stats = {},
+  selectTab = () => {},
+  hostels = [],
+  ownerAnalytics = {},
+  approvedStudents = [],
+  expectedThisMonth = 0,
+  collectedThisMonth = 0,
+  outstandingThisMonth = 0,
+  dueTodayGuests = [],
+  overdueGuests = [],
+  setGuestDetailId = () => {},
+  formatDisplayDate = (d) => d || "",
+  ownerActionItems = [],
 }) {
+  const safeDueToday = Array.isArray(dueTodayGuests) ? dueTodayGuests : [];
+  const safeOverdue = Array.isArray(overdueGuests) ? overdueGuests : [];
+  const safeHostels = Array.isArray(hostels) ? hostels : [];
+  const safeActionItems = Array.isArray(ownerActionItems) ? ownerActionItems : [];
+  const safeStudents = Array.isArray(approvedStudents) ? approvedStudents : [];
+
+  const availableBeds = Number(stats?.availableBeds || 0);
+  const totalBeds = Number(stats?.totalBeds || 0);
+  const occupiedBeds = Math.max(0, totalBeds - availableBeds);
+  const totalHostels = Number(stats?.totalHostels || safeHostels.length || 0);
+  const pendingRequests = Number(stats?.pendingRequests || 0);
+
   return (
     <>
-      <>
-            <div className="mobile-quick-grid">
-              {[
-                { label: "Available Beds", value: stats.availableBeds },
-                { label: "Occupied Beds", value: Math.max(0, stats.totalBeds - stats.availableBeds) },
-              ].map((item) => (
-                <div key={item.label} className="mobile-quick-card static">
-                  <span className="mobile-quick-label">{item.label}</span>
-                  <strong className="mobile-quick-value">{item.value}</strong>
-                </div>
-              ))}
-            </div>
-              <div className="stats-row">
-                {[
-                  { label: "Your Hostels", num: stats.totalHostels },
-                  { label: "Active Guests", num: ownerAnalytics?.active_guests_count ?? approvedStudents.length },
-                  { label: "Expected This Month", num: `INR ${expectedThisMonth}` },
-                  { label: "Collected This Month", num: `INR ${collectedThisMonth}` },
-                  { label: "Outstanding This Month", num: `INR ${outstandingThisMonth}` },
-                  { label: "Occupancy %", num: `${ownerAnalytics?.occupancy_rate ?? 0}%` },
-                  { label: "Check-ins Today", num: ownerAnalytics?.checkins_today ?? 0 },
-                  { label: "Check-outs Today", num: ownerAnalytics?.checkouts_today ?? 0 },
-                  { label: "Pending Requests", num: stats.pendingRequests },
-                ].map((stat) => (
-                <div className="stat-card" key={stat.label}>
+      <div className="mobile-quick-grid">
+        {[
+          { label: "Available Beds", value: availableBeds },
+          { label: "Occupied Beds", value: occupiedBeds },
+        ].map((item) => (
+          <div key={item.label} className="mobile-quick-card static">
+            <span className="mobile-quick-label">{item.label}</span>
+            <strong className="mobile-quick-value">{item.value}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="stats-row">
+        {[
+          { label: "Your Hostels", num: totalHostels },
+          { label: "Active Guests", num: ownerAnalytics?.active_guests_count ?? safeStudents.length },
+          { label: "Expected This Month", num: `INR ${expectedThisMonth}` },
+          { label: "Collected This Month", num: `INR ${collectedThisMonth}` },
+          { label: "Outstanding This Month", num: `INR ${outstandingThisMonth}` },
+          { label: "Occupancy %", num: `${ownerAnalytics?.occupancy_rate ?? 0}%` },
+          { label: "Check-ins Today", num: ownerAnalytics?.checkins_today ?? 0 },
+          { label: "Check-outs Today", num: ownerAnalytics?.checkouts_today ?? 0 },
+          { label: "Pending Requests", num: pendingRequests },
+        ].map((stat) => (
+          <div className="stat-card" key={stat.label}>
                   <div className="stat-num">{stat.num}</div>
                   <div className="stat-label">{stat.label}</div>
                 </div>
@@ -57,10 +80,10 @@ export default function OwnerOverviewTab({
               <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
                 <div className="edit-compact-card">
                   <div style={{ fontWeight: 700, color: "var(--espresso)" }}>Due Today</div>
-                  {dueTodayGuests.length === 0 ? (
+                  {safeDueToday.length === 0 ? (
                     <div style={{ fontSize: 13, color: "var(--warm-gray)" }}>No guests are due today.</div>
                   ) : (
-                    dueTodayGuests.slice(0, 5).map((student) => (
+                    safeDueToday.slice(0, 5).map((student) => (
                       <button
                         key={`due-today-${student.student_id}`}
                         type="button"
@@ -78,10 +101,10 @@ export default function OwnerOverviewTab({
                 </div>
                 <div className="edit-compact-card">
                   <div style={{ fontWeight: 700, color: "#b91c1c" }}>Overdue Payments</div>
-                  {overdueGuests.length === 0 ? (
+                  {safeOverdue.length === 0 ? (
                     <div style={{ fontSize: 13, color: "var(--warm-gray)" }}>No overdue payments right now.</div>
                   ) : (
-                    overdueGuests.slice(0, 5).map((student) => (
+                    safeOverdue.slice(0, 5).map((student) => (
                       <button
                         key={`overdue-${student.student_id}`}
                         type="button"
@@ -101,14 +124,14 @@ export default function OwnerOverviewTab({
             </div>
             <div className="form-section">
               <div className="form-section-title">Your Listings</div>
-              {hostels.length === 0 && (
+              {safeHostels.length === 0 && (
                 <div className="empty-state" style={{ padding: "28px 12px" }}>
                   <span className="empty-icon">Listing</span>
                   <div className="empty-title">Your listing will appear here</div>
                   <p className="empty-sub">Once your hostel is approved, this section becomes your command center for pricing, occupancy, and guest operations.</p>
                 </div>
               )}
-              {hostels.map((hostel) => (
+              {safeHostels.map((hostel) => (
                 <div
                   key={hostel.id}
                   style={{
@@ -168,7 +191,7 @@ export default function OwnerOverviewTab({
             <div className="form-section" style={{ marginTop: 18 }}>
               <div className="form-section-title">Next Best Actions</div>
               <div className="workflow-grid">
-                {ownerActionItems.map((item) => (
+                {safeActionItems.map((item) => (
                   <div key={item.title} className="workflow-card">
                     <div className="workflow-card-title">{item.title}</div>
                     <p className="workflow-card-desc">{item.desc}</p>
@@ -180,6 +203,5 @@ export default function OwnerOverviewTab({
               </div>
             </div>
           </>
-    </>
   );
 }

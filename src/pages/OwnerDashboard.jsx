@@ -5,10 +5,12 @@ import OwnerLeavesTab from "../features/owner/components/OwnerLeavesTab";
 import OwnerReviewsTab from "../features/owner/components/OwnerReviewsTab";
 import OwnerSettingsTab from "../features/owner/components/OwnerSettingsTab";
 import MapPickerModal from "../components/MapPickerModal";
+import RentReceiptModal from "../components/RentReceiptModal";
 import {
   createComplaint,
   createFeeLedger,
   createFeePayment,
+  parseBankSms,
   deleteFeePayment,
   createMenu,
   createWalkinStudent,
@@ -52,14 +54,13 @@ export default function OwnerDashboard({
   ownerPhone = "",
   ownerRole = "owner",
   ownerStatus,
-  hostels,
-  requests,
-  onRequestStatusChange,
-  onBack,
-  onTabChange,
-  onToast,
-  onLogout,
-  onRefreshHostels,
+  hostels = [],
+  requests = [],
+  onRequestStatusChange = () => {},
+  onTabChange = () => {},
+  onToast = () => {},
+  onLogout = () => {},
+  onRefreshHostels = () => {},
 }) {
   const todayForDues = new Date();
   const startOfTodayForDues = new Date(todayForDues.getFullYear(), todayForDues.getMonth(), todayForDues.getDate());
@@ -124,6 +125,11 @@ export default function OwnerDashboard({
   });
   const [paymentForm, setPaymentForm] = useState({ ledgerId: "", amount: "", mode: "upi", referenceId: "" });
   const [editingPaymentId, setEditingPaymentId] = useState(null);
+  const [smsText, setSmsText] = useState("");
+  const [parsedSmsResult, setParsedSmsResult] = useState(null);
+  const [parsingSms, setParsingSms] = useState(false);
+  const [receiptLedger, setReceiptLedger] = useState(null);
+  const [receiptPayment, setReceiptPayment] = useState(null);
   const [menuForm, setMenuForm] = useState({
     hostelId: "",
     date: "",
@@ -806,7 +812,7 @@ export default function OwnerDashboard({
     const loadOpsData = async () => {
       if (!["overview", "fees", "menu", "leaves", "complaints", "reviews"].includes(activeTab)) return;
       try {
-        const [ledgerData, menuData, leaveData, complaintData, reviewData, trustData, analyticsData, defaulterData] = await Promise.all([
+        const results = await Promise.allSettled([
           fetchFeeLedgers(),
           fetchMenus(),
           fetchLeaves(),
@@ -816,14 +822,24 @@ export default function OwnerDashboard({
           fetchOwnerAnalytics(),
           fetchOwnerDefaulters(),
         ]);
-        setFeeLedgers(ledgerData || []);
-        setMenus(menuData || []);
-        setLeaves(leaveData || []);
-        setComplaints(complaintData || []);
-        setReviews(reviewData || []);
-        setTrustSummary(trustData);
-        setOwnerAnalytics(analyticsData);
-        setDefaulters(defaulterData || []);
+        const [
+          ledgerRes,
+          menuRes,
+          leaveRes,
+          complaintRes,
+          reviewRes,
+          trustRes,
+          analyticsRes,
+          defaulterRes,
+        ] = results;
+        if (ledgerRes.status === "fulfilled") setFeeLedgers(ledgerRes.value || []);
+        if (menuRes.status === "fulfilled") setMenus(menuRes.value || []);
+        if (leaveRes.status === "fulfilled") setLeaves(leaveRes.value || []);
+        if (complaintRes.status === "fulfilled") setComplaints(complaintRes.value || []);
+        if (reviewRes.status === "fulfilled") setReviews(reviewRes.value || []);
+        if (trustRes.status === "fulfilled") setTrustSummary(trustRes.value);
+        if (analyticsRes.status === "fulfilled") setOwnerAnalytics(analyticsRes.value);
+        if (defaulterRes.status === "fulfilled") setDefaulters(defaulterRes.value || []);
       } catch (error) {
         onToast(error.message || "Unable to load owner operations.");
       }
@@ -995,16 +1011,45 @@ export default function OwnerDashboard({
     };
 
     const refreshFeeOps = async () => {
-      const [ledgerData, analyticsData, defaulterData, studentData] = await Promise.all([
+      const results = await Promise.allSettled([
         fetchFeeLedgers(),
         fetchOwnerAnalytics(),
         fetchOwnerDefaulters(),
         fetchOwnerStudents(),
       ]);
-      setFeeLedgers(ledgerData || []);
-      setOwnerAnalytics(analyticsData);
-      setDefaulters(defaulterData || []);
-      applyStudentsData(studentData);
+      const [ledgerRes, analyticsRes, defaulterRes, studentRes] = results;
+      if (ledgerRes.status === "fulfilled") setFeeLedgers(ledgerRes.value || []);
+      if (analyticsRes.status === "fulfilled") setOwnerAnalytics(analyticsRes.value);
+      if (defaulterRes.status === "fulfilled") setDefaulters(defaulterRes.value || []);
+      if (studentRes.status === "fulfilled") applyStudentsData(studentRes.value);
+    };
+
+    const handleParseSms = async (autoSettle = false, targetLedgerId = null) => {
+      if (!smsText.trim()) {
+        onToast("Please paste the bank credit SMS text first.");
+        return;
+      }
+      setParsingSms(true);
+      try {
+        const res = await parseBankSms({
+          sms_text: smsText.trim(),
+          auto_settle: autoSettle,
+          ledger_id: targetLedgerId || (parsedSmsResult?.matched_ledger?.id ? parsedSmsResult.matched_ledger.id : undefined),
+        });
+        setParsedSmsResult(res);
+        if (res.settled) {
+          onToast(res.message || "Payment verified & settled successfully!");
+          setSmsText("");
+          setParsedSmsResult(null);
+          await refreshFeeOps();
+        } else {
+          onToast(`SMS parsed: ₹${res.parsed?.amount || 0} (Ref: ${res.parsed?.reference_id || "N/A"})`);
+        }
+      } catch (err) {
+        onToast(err.message || "Failed to parse bank SMS.");
+      } finally {
+        setParsingSms(false);
+      }
     };
   
     const handleRecordPayment = async () => {
@@ -1270,14 +1315,18 @@ export default function OwnerDashboard({
         {activeTab === "overview" && (
           <OwnerOverviewTab
             stats={stats}
-            isCompactMobile={isCompactMobile}
             selectTab={selectTab}
-            selectedHostel={selectedHostel}
+            hostels={hostels}
             ownerAnalytics={ownerAnalytics}
-            ownerDefaulters={ownerDefaulters}
-            defaulterLimit={defaulterLimit}
-            setDefaulterLimit={setDefaulterLimit}
-            onToast={onToast}
+            approvedStudents={approvedStudents}
+            expectedThisMonth={expectedThisMonth}
+            collectedThisMonth={collectedThisMonth}
+            outstandingThisMonth={outstandingThisMonth}
+            dueTodayGuests={dueTodayGuests}
+            overdueGuests={overdueGuests}
+            setGuestDetailId={setGuestDetailId}
+            formatDisplayDate={formatDisplayDate}
+            ownerActionItems={ownerActionItems}
           />
         )}
         {activeTab === "edit" && (
@@ -2326,6 +2375,7 @@ export default function OwnerDashboard({
           <OwnerEnquiriesTab
             requests={requests}
             onRequestStatusChange={onRequestStatusChange}
+            formatDisplayDate={formatDisplayDate}
           />
         )}
         {activeTab === "settings" && (
@@ -2375,6 +2425,141 @@ export default function OwnerDashboard({
                   Export Fee Ledger CSV
                 </button>
               </div>
+            </div>
+
+            <div className="form-section" style={{ border: "1px solid #86efac", background: "#f0fdf4" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                <div className="form-section-title" style={{ margin: 0, color: "#166534" }}>
+                  ⚡ Instant Bank SMS / UPI Auto-Reconciliation
+                </div>
+                <div style={{ fontSize: 11, background: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
+                  0% Gateway Fee Engine
+                </div>
+              </div>
+              <p style={{ fontSize: 13, color: "#166534", marginBottom: 12 }}>
+                Paste bank credit SMS alerts (SBI, HDFC, ICICI, Axis, Kotak, PNB, PhonePe, Paytm) to auto-extract amount &amp; 12-digit UTR and verify tenant rent payments instantly with zero transaction charges.
+              </p>
+              <textarea
+                className="form-input"
+                rows={3}
+                style={{ fontFamily: "monospace", fontSize: 12, resize: "vertical" }}
+                placeholder="e.g. Dear SBI User, A/C 1234 credited by INR 6,500.00 on 24-Oct-26 by UPI/123456789012/Rent transfer from Ramesh..."
+                value={smsText}
+                onChange={(e) => setSmsText(e.target.value)}
+              />
+              <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="submit-btn"
+                  style={{ background: "#166534", color: "#fff" }}
+                  disabled={parsingSms || !smsText.trim()}
+                  onClick={() => handleParseSms(false)}
+                >
+                  {parsingSms ? "Parsing SMS..." : "Parse & Match Bank SMS"}
+                </button>
+                {smsText && (
+                  <button
+                    type="button"
+                    className="nav-btn"
+                    onClick={() => {
+                      setSmsText("");
+                      setParsedSmsResult(null);
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {parsedSmsResult && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: 14,
+                    background: "#ffffff",
+                    borderRadius: 8,
+                    border: "1px solid #86efac",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#166534", marginBottom: 6 }}>
+                    ✓ SMS Parsed Successfully
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, fontSize: 13 }}>
+                    <div>
+                      <span style={{ color: "var(--warm-gray)" }}>Credited Amount:</span>{" "}
+                      <strong>INR {parsedSmsResult.parsed?.amount}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--warm-gray)" }}>12-Digit Bank UTR:</span>{" "}
+                      <strong style={{ fontFamily: "monospace" }}>{parsedSmsResult.parsed?.reference_id || "None"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--warm-gray)" }}>Sender VPA:</span>{" "}
+                      <span>{parsedSmsResult.parsed?.sender_vpa || "Direct Bank"}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #dcfce7" }}>
+                    {parsedSmsResult.matched_ledger ? (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                        <div style={{ fontSize: 13 }}>
+                          <strong>Matched Unpaid Ledger:</strong> {parsedSmsResult.matched_ledger.student_name} (
+                          {parsedSmsResult.matched_ledger.hostel_name}) — Due: INR {parsedSmsResult.matched_ledger.amount_due}
+                        </div>
+                        <button
+                          type="button"
+                          className="submit-btn"
+                          style={{ background: "#15803d", color: "#fff", padding: "8px 16px" }}
+                          disabled={parsingSms}
+                          onClick={() => handleParseSms(true, parsedSmsResult.matched_ledger.id)}
+                        >
+                          {parsingSms ? "Settling..." : "Verify & Settle Payment"}
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 13, color: "#b45309", marginBottom: 8, fontWeight: 600 }}>
+                          No exact ledger amount match. Select a pending ledger to settle:
+                        </div>
+                        {parsedSmsResult.candidate_ledgers?.length > 0 ? (
+                          <div style={{ display: "grid", gap: 6 }}>
+                            {parsedSmsResult.candidate_ledgers.map((cand) => (
+                              <div
+                                key={cand.id}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "6px 10px",
+                                  background: "#f8fafc",
+                                  borderRadius: 6,
+                                  fontSize: 12,
+                                  border: "1px solid #e2e8f0",
+                                }}
+                              >
+                                <div>
+                                  <strong>{cand.student_name}</strong> ({cand.hostel_name}) — Due INR {cand.amount_due} (Bal: INR {cand.outstanding})
+                                </div>
+                                <button
+                                  type="button"
+                                  className="submit-btn"
+                                  style={{ padding: "4px 10px", fontSize: 11, background: "#166534", color: "#fff" }}
+                                  disabled={parsingSms}
+                                  onClick={() => handleParseSms(true, cand.id)}
+                                >
+                                  Settle into this Ledger
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ fontSize: 12, color: "var(--warm-gray)" }}>No pending unpaid ledgers found.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="form-section">
@@ -2478,49 +2663,151 @@ export default function OwnerDashboard({
               </div>
 
               <div className="form-section">
-                <div className="form-section-title">Fee Ledger History</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+                  <div className="form-section-title" style={{ margin: 0 }}>Fee Ledger History</div>
+                  <div style={{ fontSize: 12, color: "var(--forest, #1e3a1e)", background: "rgba(30, 58, 30, 0.08)", padding: "4px 10px", borderRadius: 6, fontWeight: 600 }}>
+                    Direct Bank UPI Reconciled • 0% Platform Fee
+                  </div>
+                </div>
+
                 {feeLedgers.length === 0 && <p style={{ color: "var(--warm-gray)", fontSize: 14 }}>No fee ledgers yet.</p>}
-              {feeLedgers.map((ledger) => (
-                <div key={ledger.id} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: 14, marginBottom: 10, background: "white" }}>
-                  <div style={{ fontWeight: 700 }}>{ledger.student_name} - {ledger.hostel_name}</div>
-                    <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
-                      Due {formatDisplayDate(ledger.due_date)} | Amount Due INR {ledger.amount_due} | Paid INR {ledger.amount_paid}
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: 12 }}>Status: <strong>{ledger.status}</strong></div>
-                    {ledger.payments?.length > 0 && (
-                      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                        {ledger.payments.map((payment) => (
-                          <div
-                            key={payment.id}
+                {feeLedgers.map((ledger) => {
+                  const outstanding = Math.max(0, (Number(ledger.amount_due || 0) + Number(ledger.late_fee || 0)) - Number(ledger.amount_paid || 0));
+                  return (
+                    <div key={ledger.id} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: 14, marginBottom: 12, background: "white" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 15 }}>{ledger.student_name} - {ledger.hostel_name}</div>
+                          <div style={{ fontSize: 13, color: "var(--warm-gray)", marginTop: 4 }}>
+                            Due {formatDisplayDate(ledger.due_date)} | Amount Due INR {ledger.amount_due} | Paid INR {ledger.amount_paid}
+                            {outstanding > 0 && <span style={{ color: "#b91c1c", fontWeight: 600, marginLeft: 6 }}>Balance: INR {outstanding}</span>}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 10,
-                              alignItems: "center",
-                              padding: "8px 10px",
-                              borderRadius: 8,
-                              background: "var(--cream-soft)",
-                              fontSize: 12,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              background: ledger.status === "paid" ? "#dcfce7" : ledger.status === "overdue" ? "#fee2e2" : "#fef3c7",
+                              color: ledger.status === "paid" ? "#15803d" : ledger.status === "overdue" ? "#b91c1c" : "#b45309",
                             }}
                           >
-                            <div style={{ color: "var(--warm-gray)" }}>
-                              INR {payment.amount} via {payment.mode} on {formatDisplayDateTime(payment.paid_at)}
-                              {payment.reference_id ? ` | Ref ${payment.reference_id}` : ""}
-                            </div>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button className="nav-btn" type="button" onClick={() => handleEditPayment(payment, ledger)}>
-                                Edit
-                              </button>
-                              <button className="nav-btn" type="button" onClick={() => handleDeletePayment(payment.id)}>
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                            {ledger.status}
+                          </span>
+                          {outstanding > 0 && (
+                            <button
+                              type="button"
+                              className="nav-btn"
+                              style={{ fontSize: 11, padding: "3px 8px" }}
+                              onClick={() => {
+                                setPaymentForm({
+                                  ledgerId: String(ledger.id),
+                                  amount: String(outstanding),
+                                  mode: "upi",
+                                  referenceId: "",
+                                });
+                                onToast(`Selected ledger for ${ledger.student_name}. Record payment above.`);
+                              }}
+                            >
+                              Settle Remainder
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="nav-btn"
+                            style={{ fontSize: 11, padding: "3px 8px" }}
+                            onClick={() => {
+                              setReceiptLedger(ledger);
+                              setReceiptPayment(ledger.payments?.[0] || null);
+                            }}
+                          >
+                            Receipt 📄
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {ledger.payments?.length > 0 && (
+                        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                          {ledger.payments.map((payment) => (
+                            <div
+                              key={payment.id}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 10,
+                                alignItems: "center",
+                                padding: "8px 12px",
+                                borderRadius: 8,
+                                background: payment.mode === "upi" ? "#f0fdf4" : "var(--cream-soft)",
+                                border: payment.mode === "upi" ? "1px solid #bbf7d0" : "1px solid var(--cream-dark)",
+                                fontSize: 12,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                <strong style={{ color: "#1c1917" }}>INR {payment.amount}</strong>
+                                <span style={{ color: "var(--warm-gray)" }}>via {payment.mode?.toUpperCase()} on {formatDisplayDateTime(payment.paid_at)}</span>
+                                {payment.reference_id && (
+                                  <span
+                                    style={{
+                                      fontFamily: "monospace",
+                                      fontWeight: 600,
+                                      background: "#ffffff",
+                                      padding: "2px 8px",
+                                      borderRadius: 4,
+                                      border: "1px solid #86efac",
+                                      color: "#166534",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                    }}
+                                  >
+                                    Bank UTR: {payment.reference_id}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                {payment.reference_id && (
+                                  <button
+                                    className="nav-btn"
+                                    type="button"
+                                    style={{ fontSize: 11, padding: "2px 6px" }}
+                                    onClick={() => {
+                                      navigator.clipboard?.writeText(payment.reference_id);
+                                      onToast(`Copied UTR: ${payment.reference_id}`);
+                                    }}
+                                  >
+                                    Copy UTR
+                                  </button>
+                                )}
+                                <button
+                                  className="nav-btn"
+                                  type="button"
+                                  style={{ fontSize: 11, padding: "2px 6px" }}
+                                  onClick={() => {
+                                    setReceiptLedger(ledger);
+                                    setReceiptPayment(payment);
+                                  }}
+                                >
+                                  Receipt 📄
+                                </button>
+                                <button className="nav-btn" type="button" onClick={() => handleEditPayment(payment, ledger)}>
+                                  Edit
+                                </button>
+                                <button className="nav-btn" type="button" onClick={() => handleDeletePayment(payment.id)}>
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
           </>
         )}
@@ -2581,7 +2868,7 @@ export default function OwnerDashboard({
           <OwnerLeavesTab
             leaves={leaves}
             formatDisplayDate={formatDisplayDate}
-            handleLeaveDecision={handleLeaveDecision}
+            handleLeaveDecision={handleLeaveStatus}
           />
         )}
         {activeTab === "complaints" && (
@@ -2634,8 +2921,9 @@ export default function OwnerDashboard({
           <OwnerReviewsTab
             trustSummary={trustSummary}
             reviews={reviews}
-            formatDisplayDate={formatDisplayDate}
-            handleReviewModeration={handleReviewModeration}
+            ownerReplies={ownerReplies}
+            setOwnerReplies={setOwnerReplies}
+            handleOwnerReply={handleOwnerReply}
           />
         )}
         {activeTab === "settings" && (
@@ -2646,9 +2934,20 @@ export default function OwnerDashboard({
             ownerStatus={ownerStatus}
             trustSummary={trustSummary}
             ownerHighlights={ownerHighlights}
+            onToast={onToast}
           />
         )}
       </div>
+
+      <RentReceiptModal
+        isOpen={Boolean(receiptLedger)}
+        ledger={receiptLedger}
+        payment={receiptPayment}
+        onClose={() => {
+          setReceiptLedger(null);
+          setReceiptPayment(null);
+        }}
+      />
     </div>
   );
 }

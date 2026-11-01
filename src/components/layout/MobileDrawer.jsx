@@ -33,6 +33,17 @@ export default function MobileDrawer({
             type="button"
             className="mobile-drawer-item"
             onClick={() => {
+              if (onNavigateLanding) onNavigateLanding();
+              else onNavigateHome();
+              onClose();
+            }}
+          >
+            About StayNest
+          </button>
+          <button
+            type="button"
+            className="mobile-drawer-item"
+            onClick={() => {
               onNavigateHome();
               onClose();
             }}
@@ -50,7 +61,7 @@ export default function MobileDrawer({
                   onClose();
                 }}
               >
-                Guest Login
+                Tenant Login
               </button>
               <button
                 type="button"
@@ -61,16 +72,6 @@ export default function MobileDrawer({
                 }}
               >
                 Owner Login
-              </button>
-              <button
-                type="button"
-                className="mobile-drawer-item"
-                onClick={() => {
-                  onNavigateTo("admin");
-                  onClose();
-                }}
-              >
-                Admin Login
               </button>
             </>
           ) : (
@@ -108,7 +109,7 @@ export default function MobileDrawer({
                     onClose();
                   }}
                 >
-                  Admin Dashboard
+                  Security & Compliance
                 </button>
               )}
               <button

@@ -251,15 +251,11 @@ export default function HomePage({
   return (
     <div>
       <section className="hero">
-        <div className="hero-badge">India&apos;s Hostel Platform</div>
         <h1 className="hero-title">
-          Find Your
-          <br />
-          <em>Perfect Nest</em>
+          Find Your Next Home Away from Home
         </h1>
         <p className="hero-sub">
-          Discover verified hostels near your college or workplace. Compare rooms, menus and prices
-          in one place.
+          Discover verified hostels and PGs near your college or workplace. Compare room sharings, weekly food menus, and transparent prices with zero brokerage.
         </p>
         <div className="hero-workflow-strip">
           {[
@@ -270,82 +266,6 @@ export default function HomePage({
             <span key={item} className="hero-workflow-pill">{item}</span>
           ))}
         </div>
-        <div className="hero-search" ref={searchRef}>
-          <input
-            placeholder="Search by location, area or hostel name..."
-            value={searchQuery}
-            onChange={(event) => {
-              setSearchQuery(event.target.value);
-              setSuggestionsOpen(true);
-              setActiveSuggestionIndex(-1);
-            }}
-            onFocus={() => setSuggestionsOpen(true)}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown" && combinedSuggestions.length > 0) {
-                event.preventDefault();
-                setSuggestionsOpen(true);
-                setActiveSuggestionIndex((current) => Math.min(current + 1, combinedSuggestions.length - 1));
-                return;
-              }
-              if (event.key === "ArrowUp" && combinedSuggestions.length > 0) {
-                event.preventDefault();
-                setActiveSuggestionIndex((current) => Math.max(current - 1, 0));
-                return;
-              }
-              if (event.key === "Enter") {
-                event.preventDefault();
-                if (suggestionsOpen && activeSuggestionIndex >= 0 && combinedSuggestions[activeSuggestionIndex]) {
-                  runSearchForSuggestion(combinedSuggestions[activeSuggestionIndex]);
-                  return;
-                }
-                handleSearchClick();
-              }
-            }}
-          />
-          <button className="hero-search-btn" onClick={handleSearchClick} disabled={searchBusy}>
-            {searchBusy ? "Searching..." : "Search Hostels"}
-          </button>
-          {suggestionsOpen && (combinedSuggestions.length > 0 || suggestionsBusy) && (
-            <div className="hero-search-suggestions">
-              {localSuggestions.length > 0 && (
-                <div className="hero-search-group-label">Matching hostels</div>
-              )}
-              {combinedSuggestions.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`hero-search-suggestion${activeSuggestionIndex === index ? " active" : ""}`}
-                  onClick={() => runSearchForSuggestion(item)}
-                >
-                  <span className="hero-search-suggestion-title">{item.label}</span>
-                  {item.secondaryText && (
-                    <span className="hero-search-suggestion-meta">
-                      {item.type === "hostel" ? "PG match" : "Nearby place"} - {item.secondaryText}
-                    </span>
-                  )}
-                </button>
-              ))}
-              {suggestionsBusy && (
-                <div className="hero-search-suggestion-loading">Loading suggestions...</div>
-              )}
-            </div>
-          )}
-        </div>
-        {searchPoint && (
-          <div className="card-signal-row" style={{ marginTop: 14 }}>
-            <span className="card-signal">Showing nearest stays from {searchLabel}</span>
-            {[5, 10, 15, 25].map((radius) => (
-              <button
-                key={radius}
-                type="button"
-                className={`filter-chip${distanceRadiusKm === radius ? " active" : ""}`}
-                onClick={() => setDistanceRadiusKm(radius)}
-              >
-                Within {radius} km
-              </button>
-            ))}
-          </div>
-        )}
         <div className="hero-stats">
           {[
             [`${verifiedCount}+`, "Verified Hostels"],
@@ -382,6 +302,85 @@ export default function HomePage({
             </strong>
             <span>beds currently open</span>
           </div>
+        </div>
+
+        <div className="section-search-container" style={{ margin: "20px 0 16px" }}>
+          <div className="hero-search" ref={searchRef} style={{ width: "100%", maxWidth: "100%", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", border: "1.5px solid var(--cream-dark)" }}>
+            <input
+              placeholder="Search by location, area or hostel name..."
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setSuggestionsOpen(true);
+                setActiveSuggestionIndex(-1);
+              }}
+              onFocus={() => setSuggestionsOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" && combinedSuggestions.length > 0) {
+                  event.preventDefault();
+                  setSuggestionsOpen(true);
+                  setActiveSuggestionIndex((current) => Math.min(current + 1, combinedSuggestions.length - 1));
+                  return;
+                }
+                if (event.key === "ArrowUp" && combinedSuggestions.length > 0) {
+                  event.preventDefault();
+                  setActiveSuggestionIndex((current) => Math.max(current - 1, 0));
+                  return;
+                }
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (suggestionsOpen && activeSuggestionIndex >= 0 && combinedSuggestions[activeSuggestionIndex]) {
+                    runSearchForSuggestion(combinedSuggestions[activeSuggestionIndex]);
+                    return;
+                  }
+                  handleSearchClick();
+                }
+              }}
+            />
+            <button className="hero-search-btn" onClick={handleSearchClick} disabled={searchBusy}>
+              {searchBusy ? "Searching..." : "Search Hostels"}
+            </button>
+            {suggestionsOpen && (combinedSuggestions.length > 0 || suggestionsBusy) && (
+              <div className="hero-search-suggestions">
+                {localSuggestions.length > 0 && (
+                  <div className="hero-search-group-label">Matching hostels</div>
+                )}
+                {combinedSuggestions.map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`hero-search-suggestion${activeSuggestionIndex === index ? " active" : ""}`}
+                    onClick={() => runSearchForSuggestion(item)}
+                  >
+                    <span className="hero-search-suggestion-title">{item.label}</span>
+                    {item.secondaryText && (
+                      <span className="hero-search-suggestion-meta">
+                        {item.type === "hostel" ? "PG match" : "Nearby place"} - {item.secondaryText}
+                      </span>
+                    )}
+                  </button>
+                ))}
+                {suggestionsBusy && (
+                  <div className="hero-search-suggestion-loading">Loading suggestions...</div>
+                )}
+              </div>
+            )}
+          </div>
+          {searchPoint && (
+            <div className="card-signal-row" style={{ marginTop: 12 }}>
+              <span className="card-signal">Showing nearest stays from {searchLabel}</span>
+              {[5, 10, 15, 25].map((radius) => (
+                <button
+                  key={radius}
+                  type="button"
+                  className={`filter-chip${distanceRadiusKm === radius ? " active" : ""}`}
+                  onClick={() => setDistanceRadiusKm(radius)}
+                >
+                  Within {radius} km
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="filters">

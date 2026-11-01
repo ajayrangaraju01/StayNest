@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth/useAuth";
 import Toast from "./components/Toast";
+import ErrorBoundary from "./components/ErrorBoundary";
 import AdminDashboard from "./pages/AdminDashboard";
 import HomePage from "./pages/HomePage";
+import LandingPage from "./pages/LandingPage";
 import HostelDetail from "./pages/HostelDetail";
 import OwnerDashboard from "./pages/OwnerDashboard";
 import StudentDashboard from "./pages/StudentDashboard";
@@ -51,14 +53,107 @@ function mapGuestGenderToAllowedHostelGenders(gender) {
   return ["Co-Live"];
 }
 
+export const ADMIN_HASH_ROUTE = "admin";
+
+const ROUTE_SLUGS = {
+  landing: "",
+  home: "explore",
+  detail: "stay-detail",
+  student: "resident-portal",
+  owner: "owner-portal",
+  admin: "admin",
+  auth_guest: "tenant-login",
+  auth_owner: "owner-login",
+  auth_admin: "admin",
+};
+
+function getSlugForPage(p, role) {
+  if (p === "admin" || (p === "auth" && role === "admin")) {
+    return "admin";
+  }
+  if (p === "owner" || (p === "auth" && role === "owner")) {
+    return "owner-login";
+  }
+  if (p === "student" || (p === "auth" && role === "guest")) {
+    return "tenant-login";
+  }
+  if (p === "home") return "explore";
+  return ROUTE_SLUGS[p] || "";
+}
+
+function parseUrlRoute() {
+  if (typeof window === "undefined") return null;
+  const path = window.location.pathname.replace(/\/+$/, "");
+  const hash = window.location.hash.replace(/^#\/?/, "").replace(/\/+$/, "");
+
+  // Hidden admin page accessible at /admin or #/admin
+  if (path === "/admin" || hash === "admin" || hash === "admin/") {
+    return { page: "admin", authRole: "admin" };
+  }
+
+  // Tenant routes
+  if (hash === "tenant-login" || path === "/tenant-login" || hash === "login" || path === "/login") {
+    return { page: "auth", authRole: "guest" };
+  }
+  if (hash === "resident-portal" || path === "/resident-portal" || hash === "tenant" || path === "/tenant") {
+    return { page: "student", authRole: "guest" };
+  }
+
+  // Owner routes
+  if (hash === "owner-login" || path === "/owner-login") {
+    return { page: "auth", authRole: "owner" };
+  }
+  if (hash === "owner-portal" || path === "/owner-portal" || hash === "owner" || path === "/owner") {
+    return { page: "owner", authRole: "owner" };
+  }
+
+  if (hash === "explore" || path === "/explore") {
+    return { page: "home" };
+  }
+  return null;
+}
+
 export default function App() {
   const { user, logout } = useAuth();
   const isHandlingPopState = useRef(false);
+  const urlRoute = useMemo(() => parseUrlRoute(), []);
   const savedNavState = useMemo(() => readSavedNavState(), []);
-  const [page, setPage] = useState(() => savedNavState?.page || localStorage.getItem("staynest_last_page") || "home");
+  const [page, setPage] = useState(() => {
+    if (urlRoute) return urlRoute.page;
+    return savedNavState?.page || localStorage.getItem("staynest_last_page") || "landing";
+  });
   const [selectedHostelId, setSelectedHostelId] = useState(savedNavState?.selectedHostelId ?? null);
   const [toastMessage, setToastMessage] = useState(null);
-  const [authRole, setAuthRole] = useState(savedNavState?.authRole || "guest");
+  const [authRole, setAuthRole] = useState(() => {
+    if (urlRoute?.authRole) return urlRoute.authRole;
+    return savedNavState?.authRole || "guest";
+  });
+
+  useEffect(() => {
+    const handleHash = () => {
+      const route = parseUrlRoute();
+      if (route) {
+        setPage(route.page);
+        if (route.authRole) setAuthRole(route.authRole);
+      }
+    };
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Secret key combination: Ctrl + Shift + A (or Cmd + Shift + A) opens Staff Compliance Portal
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "A" || e.key === "a")) {
+        e.preventDefault();
+        setAuthRole("admin");
+        setPage("auth");
+        showToast("Staff Compliance Portal opened.");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   const [hostels, setHostels] = useState([]);
   const [loadingHostels, setLoadingHostels] = useState(true);
   const [ownerRequests, setOwnerRequests] = useState([]);
@@ -76,6 +171,15 @@ export default function App() {
       setSelectedHostelId(options.selectedHostelId);
     }
     setPage(nextPage);
+    const slug = getSlugForPage(nextPage, authRole);
+    const nextUrl = slug ? `/#/${slug}` : "/#/";
+    if (window.location.hash !== (slug ? `#/${slug}` : "#/")) {
+      window.history.pushState(
+        { page: nextPage, authRole, selectedHostelId: options.selectedHostelId ?? selectedHostelId },
+        "",
+        nextUrl
+      );
+    }
   };
 
   const refreshHostels = async () => {
@@ -206,6 +310,8 @@ export default function App() {
   }, [page, authRole, selectedHostelId, ownerInitialTab, adminInitialTab, studentInitialTab]);
 
   useEffect(() => {
+    const slug = getSlugForPage(page, authRole);
+    const targetUrl = slug ? `/#/${slug}` : "/#/";
     window.history.replaceState({
       page,
       authRole,
@@ -213,17 +319,20 @@ export default function App() {
       ownerInitialTab,
       adminInitialTab,
       studentInitialTab,
-    }, "");
+    }, "", targetUrl);
   }, []);
 
   useEffect(() => {
     const nextState = { page, authRole, selectedHostelId, ownerInitialTab, adminInitialTab, studentInitialTab };
     if (isHandlingPopState.current) {
       isHandlingPopState.current = false;
-      window.history.replaceState(nextState, "");
       return;
     }
-    window.history.pushState(nextState, "");
+    const slug = getSlugForPage(page, authRole);
+    const targetUrl = slug ? `/#/${slug}` : "/#/";
+    if (window.location.hash !== (slug ? `#/${slug}` : "#/")) {
+      window.history.pushState(nextState, "", targetUrl);
+    }
     setShowMobileMenu(false);
   }, [page, authRole, selectedHostelId]);
 
@@ -370,11 +479,12 @@ export default function App() {
 
     if (!result.ok) {
       showToast(result.error);
-      return;
+      return result;
     }
 
     showToast("Join request sent to owner.");
     refreshRequests();
+    return result;
   };
 
   const handleOwnerRequestAction = async (requestId, status) => {
@@ -393,44 +503,6 @@ export default function App() {
   const ownerHostels = user?.role === "owner"
     ? hostels.filter((hostel) => hostel.ownerId === user.id)
     : [];
-
-  const mobileNavItems = useMemo(() => {
-    if (user?.role === "guest") {
-      return [
-        { id: "home", label: "Browse" },
-        { id: "student", label: "My Stay" },
-      ];
-    }
-    if (user?.role === "owner") {
-      return [
-        { id: "owner", label: "Dashboard" },
-        { id: "home", label: "Browse" },
-      ];
-    }
-    if (user?.role === "admin") {
-      return [
-        { id: "admin", label: "Admin" },
-        { id: "home", label: "Browse" },
-      ];
-    }
-    return [
-      { id: "home", label: "Home" },
-      { id: "auth-guest", label: "Guest" },
-      { id: "auth-owner", label: "Owner" },
-    ];
-  }, [user]);
-
-  const handleMobileNav = (itemId) => {
-    if (itemId === "auth-guest") {
-      openAuth("guest");
-      return;
-    }
-    if (itemId === "auth-owner") {
-      openAuth("owner");
-      return;
-    }
-    navigateTo(itemId);
-  };
 
   const handleNotificationClick = (note) => {
     setShowNotifications(false);
@@ -466,38 +538,42 @@ export default function App() {
   const mobileMenuItems = useMemo(() => {
     if (!user) {
       return [
+        { id: "landing", label: "About StayNest", action: () => navigateTo("landing", { selectedHostelId: null }) },
         { id: "home", label: "Browse Hostels", action: () => navigateTo("home", { selectedHostelId: null }) },
-        { id: "auth-guest", label: "Guest Login", action: () => openAuth("guest") },
+        { id: "auth-guest", label: "Tenant Login", action: () => openAuth("guest") },
         { id: "auth-owner", label: "Owner Login", action: () => openAuth("owner") },
-        { id: "admin", label: "Admin Login", action: () => navigateTo("admin") },
       ];
     }
 
-    const items = [{ id: "home", label: "Browse Hostels", action: () => navigateTo("home", { selectedHostelId: null }) }];
-    if (user.role === "guest") items.push({ id: "student", label: "My Stay", action: () => navigateTo("student") });
+    const items = [
+      { id: "landing", label: "Home", action: () => navigateTo("landing", { selectedHostelId: null }) },
+      { id: "home", label: "Browse Hostels", action: () => navigateTo("home", { selectedHostelId: null }) },
+    ];
+    if (user.role === "guest") items.push({ id: "student", label: "Tenant Portal", action: () => navigateTo("student") });
     if (user.role === "owner") items.push({ id: "owner", label: "Owner Dashboard", action: () => navigateTo("owner") });
-    if (user.role === "admin") items.push({ id: "admin", label: "Admin Dashboard", action: () => navigateTo("admin") });
+    if (user.role === "admin") items.push({ id: "admin", label: "Security & Compliance", action: () => navigateTo("admin") });
     items.push({
       id: "logout",
       label: "Logout",
       action: () => {
         logout();
         showToast("Logged out successfully.");
-        navigateTo("home", { selectedHostelId: null });
+        navigateTo("landing", { selectedHostelId: null });
       },
     });
     return items;
   }, [user]);
 
   const mobileTitle = useMemo(() => {
+    if (page === "landing") return "StayNest";
     if (page === "detail" && selectedHostel) return selectedHostel.name;
-    if (page === "student") return "My Stay";
+    if (page === "student") return "Tenant Portal";
     if (page === "owner") return "Owner Dashboard";
-    if (page === "admin") return "Admin Dashboard";
+    if (page === "admin") return "Security & Compliance";
     if (page === "auth") {
       if (authRole === "owner") return "Owner Access";
-      if (authRole === "admin") return "Admin Access";
-      return "Guest Access";
+      if (authRole === "admin") return "Staff Access";
+      return "Tenant Access";
     }
     return "Browse Hostels";
   }, [page, selectedHostel, authRole]);
@@ -589,19 +665,26 @@ export default function App() {
 
       {page !== "owner" && page !== "admin" && (
         <nav className="nav">
-          <div className="nav-logo" onClick={() => navigateTo("home", { selectedHostelId: null })}>
+          <div className="nav-logo" onClick={() => navigateTo("landing", { selectedHostelId: null })}>
             Stay
             <span>Nest</span>
           </div>
           <div className="nav-links">
-            {user?.role !== "owner" && (
-              <button className="nav-btn" onClick={() => navigateTo("home", { selectedHostelId: null })}>
-                Browse Hostels
-              </button>
-            )}
+            <button
+              className={`nav-btn${page === "landing" ? " active" : ""}`}
+              onClick={() => navigateTo("landing", { selectedHostelId: null })}
+            >
+              Home
+            </button>
+            <button
+              className={`nav-btn${page === "home" ? " active" : ""}`}
+              onClick={() => navigateTo("home", { selectedHostelId: null })}
+            >
+              Explore Stays
+            </button>
             {user?.role === "admin" && (
               <button className="nav-btn" onClick={() => navigateTo("admin")}>
-                Admin Dashboard
+                Security &amp; Compliance
               </button>
             )}
             <button
@@ -614,7 +697,7 @@ export default function App() {
                 openAuth("guest");
               }}
             >
-              {user?.role === "guest" ? "My Hostel/PG" : "Guest Login"}
+              {user?.role === "guest" ? "Tenant Portal" : "Tenant Login"}
             </button>
             <button
               className="nav-btn"
@@ -628,36 +711,35 @@ export default function App() {
             >
               {user?.role === "owner" ? "Owner Dashboard" : "Owner Login"}
             </button>
-            <button
-              className="nav-btn"
-              onClick={() => {
-                if (user?.role === "admin") {
-                  navigateTo("admin");
-                  return;
-                }
-                navigateTo("admin");
-              }}
-            >
-              {user?.role === "admin" ? "Admin Dashboard" : "Admin Login"}
-            </button>
             {user ? (
               <button
                 className="nav-btn primary"
                 onClick={() => {
                   logout();
                   showToast("Logged out successfully.");
-                  navigateTo("home", { selectedHostelId: null });
+                  navigateTo("landing", { selectedHostelId: null });
                 }}
               >
                 Logout
               </button>
             ) : (
               <button className="nav-btn primary" onClick={() => openAuth("owner")}>
-                List Your Hostel
+                List Property
               </button>
             )}
           </div>
         </nav>
+      )}
+
+      {page === "landing" && (
+        <LandingPage
+          hostels={publicHostels}
+          onNavigateTo={navigateTo}
+          onOpenAuth={openAuth}
+          onHostelClick={(hostel) => {
+            navigateTo("detail", { selectedHostelId: hostel.id });
+          }}
+        />
       )}
 
       {page === "home" && (
@@ -680,6 +762,7 @@ export default function App() {
           onToast={showToast}
           onRequireStudentLogin={() => openAuth("guest")}
           onBookingRequest={handleBookingRequest}
+          studentRequests={studentRequests}
         />
       )}
 
@@ -696,38 +779,51 @@ export default function App() {
       )}
 
       {page === "owner" && user?.role === "owner" && (
-        <OwnerDashboard
-          initialTab={ownerInitialTab}
-          ownerName={user.name}
-          ownerPhone={user.phone}
-          ownerRole={user.role}
-          ownerStatus={user.status}
-          hostels={ownerHostels}
-          requests={ownerRequests}
-          onRequestStatusChange={handleOwnerRequestAction}
-          onBack={() => navigateTo("home")}
-          onTabChange={handleOwnerTabChange}
-          onToast={showToast}
-          onRefreshHostels={refreshHostels}
-          onLogout={() => {
-            logout();
-            navigateTo("home", { selectedHostelId: null });
-            showToast("Owner logged out.");
-          }}
-        />
+        <ErrorBoundary>
+          <OwnerDashboard
+            initialTab={ownerInitialTab}
+            ownerName={user.name}
+            ownerPhone={user.phone}
+            ownerRole={user.role}
+            ownerStatus={user.status}
+            hostels={ownerHostels}
+            requests={ownerRequests}
+            onRequestStatusChange={handleOwnerRequestAction}
+            onBack={() => navigateTo("home")}
+            onTabChange={handleOwnerTabChange}
+            onToast={showToast}
+            onRefreshHostels={refreshHostels}
+            onLogout={() => {
+              logout();
+              navigateTo("home", { selectedHostelId: null });
+              showToast("Owner logged out.");
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {page === "admin" && user?.role === "admin" && (
-        <AdminDashboard
-          initialTab={adminInitialTab}
-          adminName={user.name}
-          onTabChange={handleAdminTabChange}
-          onToast={showToast}
-          onLogout={() => {
-            logout();
-            navigateTo("home", { selectedHostelId: null });
-            showToast("Admin logged out.");
-          }}
+        <ErrorBoundary>
+          <AdminDashboard
+            initialTab={adminInitialTab}
+            adminName={user.name}
+            onTabChange={handleAdminTabChange}
+            onToast={showToast}
+            onLogout={() => {
+              logout();
+              navigateTo("home", { selectedHostelId: null });
+              showToast("Admin logged out.");
+            }}
+          />
+        </ErrorBoundary>
+      )}
+
+      {page === "student" && user?.role !== "guest" && (
+        <AuthPage
+          defaultRole="guest"
+          lockRole
+          onBack={() => navigateTo("landing")}
+          onSuccess={handleAuthSuccess}
         />
       )}
 
@@ -735,7 +831,7 @@ export default function App() {
         <AuthPage
           defaultRole="owner"
           lockRole
-          onBack={() => navigateTo("home")}
+          onBack={() => navigateTo("landing")}
           onSuccess={handleAuthSuccess}
         />
       )}
@@ -744,7 +840,7 @@ export default function App() {
         <AuthPage
           defaultRole="admin"
           lockRole
-          onBack={() => navigateTo("home")}
+          onBack={() => navigateTo("landing")}
           onSuccess={handleAuthSuccess}
         />
       )}
@@ -752,8 +848,8 @@ export default function App() {
       {page === "auth" && (
         <AuthPage
           defaultRole={authRole}
-          hideOwner={authRole === "guest"}
-          onBack={() => navigateTo("home")}
+          lockRole
+          onBack={() => navigateTo(authRole === "admin" ? "landing" : "home")}
           onSuccess={handleAuthSuccess}
         />
       )}

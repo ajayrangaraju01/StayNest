@@ -300,6 +300,10 @@ export function createFeePayment(payload) {
   return apiPost("/fee-payments/", payload);
 }
 
+export function parseBankSms(payload) {
+  return apiPost("/fee-payments/parse-sms/", payload);
+}
+
 export function updateFeePayment(id, payload) {
   return apiPatch(`/fee-payments/${id}/`, payload);
 }
