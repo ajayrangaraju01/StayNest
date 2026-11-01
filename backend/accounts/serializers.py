@@ -44,6 +44,16 @@ class UserSerializer(serializers.ModelSerializer):
             "student_profile",
             "owner_profile",
         )
+        read_only_fields = (
+            "id",
+            "role",
+            "status",
+            "verification_state",
+            "trust_score",
+            "phone_verified",
+            "email_verified",
+            "date_joined",
+        )
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

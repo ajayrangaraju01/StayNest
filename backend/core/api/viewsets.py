@@ -1,5 +1,6 @@
 from rest_framework.decorators import action
 from datetime import date
+from decimal import Decimal
 from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
@@ -38,6 +39,7 @@ from ..services.booking_services import (
     sync_room_occupancy,
     apply_pending_hostel_update,
 )
+from ..services.bank_sms_parser import parse_bank_sms
 
 class HostelViewSet(viewsets.ModelViewSet):
     queryset = Hostel.objects.all().order_by("-created_at")
@@ -171,6 +173,14 @@ class HostelViewSet(viewsets.ModelViewSet):
 
         return Response(results)
 
+    def destroy(self, request, *args, **kwargs):
+        hostel = self.get_object()
+        if request.user.role == User.Role.ADMIN:
+            return super().destroy(request, *args, **kwargs)
+        if request.user.role == User.Role.OWNER and hostel.owner_id == request.user.id:
+            return super().destroy(request, *args, **kwargs)
+        return Response({"detail": "Forbidden. Only admins or the hostel owner can delete this hostel."}, status=status.HTTP_403_FORBIDDEN)
+
 
 class RoomViewSet(viewsets.ModelViewSet):
     queryset = Room.objects.all()
@@ -205,6 +215,18 @@ class RoomViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Owner does not control this hostel."}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, *args, **kwargs)
 
+    def update(self, request, *args, **kwargs):
+        room = self.get_object()
+        if request.user.role != User.Role.ADMIN and (request.user.role != User.Role.OWNER or room.hostel.owner_id != request.user.id):
+            return Response({"detail": "Forbidden. Only hostel owners can modify rooms."}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        room = self.get_object()
+        if request.user.role != User.Role.ADMIN and (request.user.role != User.Role.OWNER or room.hostel.owner_id != request.user.id):
+            return Response({"detail": "Forbidden. Only hostel owners can delete rooms."}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
 
 class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.all().order_by("-created_at")
@@ -232,6 +254,23 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Student mismatch."}, status=status.HTTP_403_FORBIDDEN)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        hostel = serializer.validated_data.get("hostel")
+        existing_booking = Booking.objects.filter(
+            student=user,
+            hostel=hostel,
+            status__in=[Booking.Status.REQUESTED, Booking.Status.APPROVED, Booking.Status.CHECKED_IN]
+        ).first()
+        if existing_booking:
+            if existing_booking.status == Booking.Status.REQUESTED:
+                return Response(
+                    {"detail": "You already have a pending booking request for this hostel."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            return Response(
+                {"detail": "You already have an active stay or approved booking at this hostel."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         room = serializer.validated_data.get("room")
         stay_type = serializer.validated_data.get("stay_type", Booking.StayType.MONTHLY)
         move_in_date = serializer.validated_data.get("move_in_date")
@@ -239,13 +278,9 @@ class BookingViewSet(viewsets.ModelViewSet):
         total_days = serializer.validated_data.get("total_days", 0)
         if room and room.occupied_beds >= room.total_beds:
             return Response({"detail": "No beds available for this room."}, status=status.HTTP_400_BAD_REQUEST)
-        if stay_type == Booking.StayType.DAILY:
-            if not move_in_date or not move_out_date:
-                return Response({"detail": "Daily booking requires move-in and move-out dates."}, status=status.HTTP_400_BAD_REQUEST)
+        if stay_type == Booking.StayType.DAILY and move_in_date and move_out_date:
             if move_out_date <= move_in_date:
                 return Response({"detail": "Move-out date must be after move-in date."}, status=status.HTTP_400_BAD_REQUEST)
-            if total_days <= 0:
-                return Response({"detail": "Total days must be greater than zero for daily bookings."}, status=status.HTTP_400_BAD_REQUEST)
         self.perform_create(serializer)
         booking = serializer.instance
         Notification.objects.create(
@@ -278,6 +313,8 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         prev_status = booking.status
         next_status = serializer.validated_data.get("status", prev_status)
+        if user.role == User.Role.STUDENT and next_status in (Booking.Status.APPROVED, Booking.Status.CHECKED_IN):
+            return Response({"detail": "Students cannot approve or check in their own bookings."}, status=status.HTTP_403_FORBIDDEN)
         requested_room = serializer.validated_data.get("room", booking.room)
         room_to_assign = requested_room
 
@@ -345,6 +382,14 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         return Response(self.get_serializer(booking).data)
 
+    def destroy(self, request, *args, **kwargs):
+        booking = self.get_object()
+        room = booking.room
+        response = super().destroy(request, *args, **kwargs)
+        if response.status_code < 300 and room:
+            sync_room_occupancy([room.id])
+        return response
+
 
 class FeeLedgerViewSet(viewsets.ModelViewSet):
     queryset = FeeLedger.objects.all().order_by("-due_date")
@@ -366,6 +411,14 @@ class FeeLedgerViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Owner does not control this hostel."}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, *args, **kwargs)
 
+    def destroy(self, request, *args, **kwargs):
+        if request.user.role not in (User.Role.OWNER, User.Role.ADMIN):
+            return Response({"detail": "Forbidden. Only owners can delete fee ledgers."}, status=status.HTTP_403_FORBIDDEN)
+        ledger = self.get_object()
+        if request.user.role == User.Role.OWNER and ledger.hostel.owner_id != request.user.id:
+            return Response({"detail": "Forbidden. You do not own this hostel."}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
 
 class FeePaymentViewSet(viewsets.ModelViewSet):
     queryset = FeePayment.objects.select_related("ledger", "ledger__hostel", "ledger__student").all().order_by("-paid_at")
@@ -380,15 +433,107 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         return self.queryset.filter(ledger__student=user)
 
     def create(self, request, *args, **kwargs):
-        if request.user.role != User.Role.OWNER:
-            return Response({"detail": "Only owners can record payments."}, status=status.HTTP_403_FORBIDDEN)
-        ledger = FeeLedger.objects.filter(id=request.data.get("ledger"), hostel__owner=request.user).first()
-        if not ledger:
-            return Response({"detail": "Ledger not found."}, status=status.HTTP_404_NOT_FOUND)
-        response = super().create(request, *args, **kwargs)
-        if response.status_code < 300:
+        user = request.user
+        ledger_id = request.data.get("ledger")
+        if not ledger_id:
+            return Response({"detail": "Ledger is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.role == User.Role.STUDENT:
+            ledger = FeeLedger.objects.filter(id=ledger_id, student=user).select_related("hostel", "hostel__owner").first()
+            if not ledger:
+                return Response({"detail": "Ledger not found or does not belong to you."}, status=status.HTTP_404_NOT_FOUND)
+
+            ref_id = str(request.data.get("reference_id", "")).strip()
+            if not ref_id:
+                return Response({"detail": "Direct Bank UPI Reference ID (12-digit UTR) is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            import re
+            if not re.match(r"^\d{12}$", ref_id):
+                return Response({"detail": "Invalid Bank UPI Reference. Standard NPCI UTR must be exactly 12 digits."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if FeePayment.objects.filter(reference_id=ref_id).exists():
+                return Response({"detail": f"A payment with Bank UTR {ref_id} has already been recorded (duplicate prevention)."}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                amount = Decimal(str(request.data.get("amount", "0")))
+            except Exception:
+                return Response({"detail": "Invalid payment amount."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if amount <= Decimal("0"):
+                return Response({"detail": "Payment amount must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+
+            mode = request.data.get("mode", FeePayment.Mode.UPI)
+            if mode not in [FeePayment.Mode.UPI, FeePayment.Mode.BANK]:
+                mode = FeePayment.Mode.UPI
+
+            payment = FeePayment.objects.create(
+                ledger=ledger,
+                amount=amount,
+                mode=mode,
+                reference_id=ref_id,
+                receipt_url=str(request.data.get("receipt_url", "")),
+            )
             recalculate_ledger_payment_status(ledger)
-        return response
+
+            # Notify Owner
+            if ledger.hostel and ledger.hostel.owner:
+                Notification.objects.create(
+                    user=ledger.hostel.owner,
+                    type="fee_payment",
+                    title="Direct Bank UPI Payment Received",
+                    body=f"Tenant {user.name} recorded UPI payment of ₹{amount:,.2f} (UTR: {ref_id}) for {ledger.hostel.name}.",
+                    channel=Notification.Channel.IN_APP,
+                    status=Notification.Status.SENT,
+                )
+
+            # Notify Tenant
+            Notification.objects.create(
+                user=user,
+                type="fee_payment",
+                title="UPI Payment Recorded",
+                body=f"Your UPI payment of ₹{amount:,.2f} (UTR: {ref_id}) for {ledger.hostel.name} has been submitted.",
+                channel=Notification.Channel.IN_APP,
+                status=Notification.Status.SENT,
+            )
+
+            serializer = self.get_serializer(payment)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        elif user.role in (User.Role.OWNER, User.Role.ADMIN):
+            if user.role == User.Role.OWNER:
+                ledger = FeeLedger.objects.filter(id=ledger_id, hostel__owner=user).select_related("student", "hostel").first()
+                if not ledger:
+                    return Response({"detail": "Ledger not found or not owned by you."}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                ledger = FeeLedger.objects.filter(id=ledger_id).select_related("student", "hostel").first()
+                if not ledger:
+                    return Response({"detail": "Ledger not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            ref_id = str(request.data.get("reference_id", "")).strip()
+            mode = request.data.get("mode", FeePayment.Mode.UPI)
+            if mode == FeePayment.Mode.UPI and ref_id:
+                import re
+                if not re.match(r"^\d{12}$", ref_id):
+                    return Response({"detail": "Invalid Bank UPI Reference. Standard NPCI UTR must be exactly 12 digits."}, status=status.HTTP_400_BAD_REQUEST)
+                if FeePayment.objects.filter(reference_id=ref_id).exists():
+                    return Response({"detail": f"A payment with Bank UTR {ref_id} has already been recorded (duplicate prevention)."}, status=status.HTTP_400_BAD_REQUEST)
+
+            response = super().create(request, *args, **kwargs)
+            if response.status_code < 300:
+                recalculate_ledger_payment_status(ledger)
+                if ledger.student:
+                    amount = request.data.get("amount", "")
+                    Notification.objects.create(
+                        user=ledger.student,
+                        type="fee_payment",
+                        title="Fee Payment Settled",
+                        body=f"Payment of ₹{amount} for {ledger.hostel.name} has been verified and settled.",
+                        channel=Notification.Channel.IN_APP,
+                        status=Notification.Status.SENT,
+                    )
+            return response
+
+        return Response({"detail": "Unauthorized role."}, status=status.HTTP_403_FORBIDDEN)
 
     def update(self, request, *args, **kwargs):
         if request.user.role != User.Role.OWNER:
@@ -418,6 +563,108 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
             ledger.refresh_from_db()
             recalculate_ledger_payment_status(ledger)
         return response
+
+    @action(detail=False, methods=["post"], url_path="parse-sms")
+    def parse_sms(self, request):
+        """
+        Parses incoming Bank SMS / UPI notification text to automatically match
+        and suggest or settle a fee payment for the hostel owner.
+        """
+        if request.user.role not in (User.Role.OWNER, User.Role.ADMIN):
+            return Response({"detail": "Only owners can parse bank SMS for payment verification."}, status=status.HTTP_403_FORBIDDEN)
+
+        sms_text = request.data.get("sms_text", "").strip()
+        if not sms_text:
+            return Response({"detail": "SMS text is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        parsed = parse_bank_sms(sms_text)
+        if not parsed:
+            return Response({
+                "detail": "Unable to extract a valid credit amount or UPI reference from the provided SMS text. Please check the text format."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        amount = parsed["amount"]
+        ref_id = parsed["reference_id"]
+        sender_vpa = parsed["sender_vpa"]
+
+        # Search for matching unpaid ledgers for this owner's hostels
+        if request.user.role == User.Role.OWNER:
+            unpaid_ledgers = FeeLedger.objects.filter(
+                hostel__owner=request.user,
+                status__in=[FeeLedger.Status.PENDING, FeeLedger.Status.PARTIAL, FeeLedger.Status.OVERDUE]
+            ).select_related("student", "hostel")
+        else:
+            unpaid_ledgers = FeeLedger.objects.filter(
+                status__in=[FeeLedger.Status.PENDING, FeeLedger.Status.PARTIAL, FeeLedger.Status.OVERDUE]
+            ).select_related("student", "hostel")
+
+        # Find best candidate: exact amount match
+        matched_ledger = None
+        for ledger in unpaid_ledgers:
+            outstanding = (ledger.amount_due + ledger.late_fee) - ledger.amount_paid
+            if abs(outstanding - amount) < Decimal("0.01"):
+                matched_ledger = ledger
+                break
+
+        auto_settle = request.data.get("auto_settle", False)
+        target_ledger_id = request.data.get("ledger_id")
+        if target_ledger_id:
+            matched_ledger = unpaid_ledgers.filter(id=target_ledger_id).first()
+
+        if auto_settle and matched_ledger:
+            # Settle immediately
+            payment = FeePayment.objects.create(
+                ledger=matched_ledger,
+                amount=amount,
+                mode=FeePayment.Mode.UPI,
+                reference_id=ref_id,
+            )
+            recalculate_ledger_payment_status(matched_ledger)
+            # Notify student
+            Notification.objects.create(
+                user=matched_ledger.student,
+                type="fee_payment",
+                title="Bank Credit Verified via SMS",
+                body=f"Your UPI payment of ₹{amount:,.2f} (UTR: {ref_id}) for {matched_ledger.hostel.name} has been verified and settled.",
+                channel=Notification.Channel.IN_APP,
+                status=Notification.Status.SENT,
+            )
+            return Response({
+                "success": True,
+                "settled": True,
+                "parsed": {
+                    "amount": str(amount),
+                    "reference_id": ref_id,
+                    "sender_vpa": sender_vpa,
+                },
+                "matched_ledger": FeeLedgerSerializer(matched_ledger).data,
+                "payment": FeePaymentSerializer(payment).data,
+                "message": f"Successfully verified & settled ₹{amount:,.2f} for {matched_ledger.student.name} ({matched_ledger.hostel.name})."
+            })
+
+        return Response({
+            "success": True,
+            "settled": False,
+            "parsed": {
+                "amount": str(amount),
+                "reference_id": ref_id,
+                "sender_vpa": sender_vpa,
+            },
+            "matched_ledger": FeeLedgerSerializer(matched_ledger).data if matched_ledger else None,
+            "candidate_ledgers": [
+                {
+                    "id": l.id,
+                    "student_name": l.student.name,
+                    "hostel_name": l.hostel.name,
+                    "due_date": str(l.due_date),
+                    "amount_due": str(l.amount_due),
+                    "amount_paid": str(l.amount_paid),
+                    "outstanding": str(max(Decimal("0"), (l.amount_due + l.late_fee) - l.amount_paid)),
+                    "status": l.status,
+                }
+                for l in unpaid_ledgers[:5]
+            ]
+        })
 
 
 class MenuViewSet(viewsets.ModelViewSet):
@@ -457,6 +704,20 @@ class MenuViewSet(viewsets.ModelViewSet):
         if not Hostel.objects.filter(id=hostel_id, owner=request.user).exists():
             return Response({"detail": "Owner does not control this hostel."}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        menu = self.get_object()
+        if request.user.role != User.Role.ADMIN and (request.user.role != User.Role.OWNER or menu.hostel.owner_id != request.user.id):
+            return Response({"detail": "Only the hostel owner can edit menus."}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if request.user.role not in (User.Role.OWNER, User.Role.ADMIN):
+            return Response({"detail": "Forbidden. Only owners can delete menus."}, status=status.HTTP_403_FORBIDDEN)
+        menu = self.get_object()
+        if request.user.role == User.Role.OWNER and menu.hostel.owner_id != request.user.id:
+            return Response({"detail": "Forbidden. You do not own this hostel."}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 
 class LeaveViewSet(viewsets.ModelViewSet):

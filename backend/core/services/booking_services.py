@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from django.db import models
 from django.utils import timezone
-from ..models import Hostel, Room, Booking, FeeLedger
+from ..models import Hostel, Room, Booking, FeeLedger, HostelPhoto
 
 def add_months_safe(base_date, months):
     month_index = (base_date.month - 1) + months
@@ -93,7 +93,19 @@ def get_booking_fee_snapshot(booking, today):
 
 
 def sync_room_occupancy(room_ids=None):
-    rooms = Room.objects.all() if room_ids is None else Room.objects.filter(id__in=set(room_ids))
+    if room_ids is not None:
+        if isinstance(room_ids, (int, str)):
+            room_ids = [room_ids]
+        elif hasattr(room_ids, "id"):
+            room_ids = [room_ids.id]
+        else:
+            try:
+                room_ids = [getattr(r, "id", r) for r in room_ids]
+            except Exception:
+                room_ids = [room_ids]
+        rooms = Room.objects.filter(id__in=set(room_ids))
+    else:
+        rooms = Room.objects.all()
     for room in rooms:
         checked_in_count = Booking.objects.filter(room=room, status=Booking.Status.CHECKED_IN).count()
         normalized_occupied = min(room.total_beds, checked_in_count)

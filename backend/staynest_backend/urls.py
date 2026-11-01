@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from django.views.generic import RedirectView
 from rest_framework.routers import DefaultRouter
 
 from accounts.views import (
@@ -75,7 +76,9 @@ router.register(r'complaints', ComplaintViewSet, basename='complaint')
 router.register(r'reviews', ReviewViewSet, basename='review')
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('admin/', RedirectView.as_view(url='/#/admin', permanent=False)),
+    path('admin', RedirectView.as_view(url='/#/admin', permanent=False)),
+    path('sys-ctrl-7f49c0d18e2a/', admin.site.urls),
     path('api/health/', health_check),
     path('api/owner/students/', owner_students),
     path('api/owner/students/walkin/', owner_add_walkin_student),

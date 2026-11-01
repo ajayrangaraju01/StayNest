@@ -195,8 +195,22 @@ class FeePaymentSerializer(serializers.ModelSerializer):
 class FeeLedgerSerializer(serializers.ModelSerializer):
     payments = FeePaymentSerializer(many=True, read_only=True)
     hostel_name = serializers.CharField(source="hostel.name", read_only=True)
+    hostel_contact_number = serializers.CharField(source="hostel.contact_number", read_only=True)
     student_name = serializers.CharField(source="student.name", read_only=True)
     student_phone = serializers.CharField(source="student.phone", read_only=True)
+    upi_id = serializers.SerializerMethodField()
+
+    def get_upi_id(self, obj):
+        try:
+            if hasattr(obj.hostel.owner, "owner_profile") and obj.hostel.owner.owner_profile.payout_method:
+                return obj.hostel.owner.owner_profile.payout_method
+        except Exception:
+            pass
+        phone = obj.hostel.contact_number or (obj.hostel.owner.phone if obj.hostel.owner else "")
+        digits = "".join(filter(str.isdigit, str(phone)))[-10:]
+        if digits:
+            return f"{digits}@upi"
+        return "staynest@bank"
 
     class Meta:
         model = FeeLedger
@@ -204,9 +218,11 @@ class FeeLedgerSerializer(serializers.ModelSerializer):
             "id",
             "hostel",
             "hostel_name",
+            "hostel_contact_number",
             "student",
             "student_name",
             "student_phone",
+            "upi_id",
             "month",
             "amount_due",
             "amount_paid",
